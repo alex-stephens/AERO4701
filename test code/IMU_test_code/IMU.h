@@ -121,3 +121,10 @@ enum mpu9250_accel_range
   const int16_t tX[3] = {0,  1,  0};
   const int16_t tY[3] = {1,  0,  0};
   const int16_t tZ[3] = {0,  0, -1};
+
+
+
+// --------------------------------------------------------------
+
+void getMotion10Counts(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz, int16_t* hx, int16_t* hy, int16_t* hz, int16_t* t);
+void getMotion10(float* ax, float* ay, float* az, float* gx, float* gy, float* gz, float* hx, float* hy, float* hz, float* t);

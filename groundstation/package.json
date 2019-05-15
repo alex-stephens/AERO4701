@@ -1,0 +1,11 @@
+{
+  "name": "sceptre_groundstation",
+  "version": "0.0.1",
+  "description": "SCEPTRE Ground Station",
+  "main": "gs_server.js",
+  "author": "SCEPTRE Dev Team",
+  "dependencies": {
+    "express": "^4.16.4",
+    "morgan": "^1.9.1"
+  }
+}

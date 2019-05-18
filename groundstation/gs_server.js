@@ -7,6 +7,8 @@
     const ByteLength = require('@serialport/parser-byte-length')
     const port = new SerialPort('/dev/cu.usbserial-AI04QKTK')
 
+    var buffer = new Buffer.alloc(0);
+
 // config
     let httpport = 9876;
     app.use(express.static(__dirname + '/public'));
@@ -34,10 +36,21 @@
     const parser = port.pipe(new ByteLength({length: 1}));
     parser.on('data', datain)
 
-    function datain(buffer) {
-        var char = buffer.toString();
-        ws.clients.forEach(function (client) {
-            client.send(char);
-        });
-        console.log(char);
+
+
+function datain(newbuffer) {
+    var char = newbuffer.toString();
+    if (char === '~') {
+        buffer = new Buffer.alloc(0);
+    } else {
+        buffer = Buffer.concat([buffer, newbuffer]);
     }
+    if (buffer.length >= 4) {
+        console.log(buffer.readFloatLE())
+        ws.clients.forEach(function (client) {
+            client.send(buffer.readFloatLE());
+        });
+    }
+
+    //console.log(char);
+}

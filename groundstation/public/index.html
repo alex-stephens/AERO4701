@@ -1,12 +1,131 @@
 <html>
 <head>
-    <title>SCEPTRE</title>
+  <title>SCEPTRE</title>
 </head>
-<body>
-    <h1>SCEPTRE GROUNDSTATION</h1>
-    <h2 id="batteryVoltage"></h2>
-    <!--Raw byte stream:
-    <input type="text" name="log" disabled="true" value="" style="width: 80%;">-->
+<body style="height:100%">
+  <div id="container" style="position:absolute;top:0;bottom:0;left:0;right:0">
+    <div style="padding-left:10px">
+      <h2>SCEPTRE Ground Station</h2>
+    </div>
+    <div id="left" style="float:left;bottom:0;padding:5px;box-sizing:border-box;width:50%;box-shadow:0px 0px 0px 1px black inset;">
+      <h3>Monitoring & Whole Orbit Data</h3>
+      <table border="true">
+        <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          <th colspan="2">Bus</th>
+        </tr>
+        <tr>
+          <td>Time</td>
+          <td id="wod_time"></td>
+        </tr>
+        <tr>
+          <td>Mode</td>
+          <td id="wod_mode"></td>
+        </tr>
+        <tr>
+          <th colspan="2">EPS</th>
+        </tr>
+        <tr>
+          <th colspan="2">Battery</th>
+        </tr>
+        <tr>
+          <td>Voltage</td>
+          <td id="wod_vBat"></td>
+        </tr>
+        <tr>
+          <td>Current</td>
+          <td id="wod_iBat"></td>
+        </tr>
+        <tr>
+          <td>Temperature</td>
+          <td id="wod_tBat"></td>
+        </tr>
+        <tr>
+          <th colspan="2">Regulators</th>
+        </tr>
+        <tr>
+          <td>5V Voltage</td>
+          <td id="wod_v5V"></td>
+        </tr>
+        <tr>
+          <td>5V Current</td>
+          <td id="wod_i5V"></td>
+        </tr>
+        <tr>
+          <td>3V3 Voltage</td>
+          <td id="wod_v3V3"></td>
+        </tr>
+        <tr>
+          <td>3V3 Current</td>
+          <td id="wod_i3V3"></td>
+        </tr>
+        <tr>
+          <td>Temperature</td>
+          <td id="wod_tRegs"></td>
+        </tr>
+        <tr>
+          <th colspan="2">Transceiver</th>
+        </tr>
+        <tr>
+          <td>Temperature</td>
+          <td id="wod_tRFD"></td>
+        </tr>
+        <tr>
+          <th colspan="2">Positioning</th>
+        </tr>
+        <tr>
+          <td>Latitude</td>
+          <td id="wod_lat"></td>
+        </tr>
+        <tr>
+          <td>Longitude</td>
+          <td id="wod_lon"></td>
+        </tr>
+        <tr>
+          <td>Altitude</td>
+          <td id="wod_alt"></td>
+        </tr>
+        <tr>
+          <th colspan="2">Attitude</th>
+        </tr>
+        <tr>
+          <td>Yaw</td>
+          <td id="wod_yaw"></td>
+        </tr>
+        <tr>
+          <td>Pitch</td>
+          <td id="wod_pitch"></td>
+        </tr>
+        <tr>
+          <td>Roll</td>
+          <td id="wod_roll"></td>
+        </tr>
+        <tr>
+          <td>Yaw Rate</td>
+          <td id="wod_yawRate"></td>
+        </tr>
+        <tr>
+          <td>Pitch Rate</td>
+          <td id="wod_pitchRate"></td>
+        </tr>
+        <tr>
+          <td>Roll Rate</td>
+          <td id="wod_rollRate"></td>
+        </tr>
+      </table>
+    </div>
+    <div id="right" style="float:right;bottom:0;padding:5px;box-sizing:border-box;width:50%;box-shadow:0px 0px 0px 1px black inset;">
+      <div id="topright" style="">
+        <h3>Payload</h3>
+      </div>
+      <div id="bottomright" style="">
+        <h3>Command & Control</h3>
+      </div>
+    </div>
+  </div>
 </body>
 <script src="gs.js" charset="utf-8"></script>
 <html>

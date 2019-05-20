@@ -1,16 +1,18 @@
+#include <Time.h>
+#include <TimeLib.h>
 #include "Arduino.h"
 #include "MPU9250.h" // from Bolder Flight Systems MPU9250
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 #include <TinyGPS.h>
 
-#define WOD_TRANSMIT_BUF_LEN (81)
+#define WOD_TRANSMIT_BUF_LEN (86)
 
 
 //GLOBALS
 
 //GENERIC
-unsigned char led;
+unsigned char mode;
 
 //IMU
 MPU9250 IMU(Wire1,0x68);
@@ -37,10 +39,21 @@ void setup() {
   Serial.begin(115200);
   //while(!Serial); //will hang if teensy not connected to pc
 
+  //CLOCK
+  setSyncProvider(getTeensy3Time);
+  setSyncInterval(1);
+  setTime(0);
+
   pinMode(13, OUTPUT);
-  led = 0;
+  mode = 0;
   digitalWrite(13, LOW);
 
+  analogReference(0);
+  analogReadRes(10);
+  pinMode(14, INPUT);
+  pinMode(15, INPUT);
+  pinMode(39, INPUT);
+  
   //IMU 
   imuStatus = IMU.begin();
   if (imuStatus < 0) {
@@ -67,6 +80,11 @@ void setup() {
 
 //LOOP
 void loop() {
+  //C&C
+  while (Serial1.available()) {
+    mode = Serial1.read();
+  }
+  digitalWrite(13, mode&0x01);
   
   //IMU
   IMU.readSensor();
@@ -92,38 +110,26 @@ void loop() {
   Serial.println(IMU.getTemperature_C(),6);
 
   //GPS
-  int gpsDidUpdate = 0;
   while (Serial2.available() > 0) {
           // read the incoming byte:
           char c = Serial2.read();
           
           if (gps.encode(c)) {
-            Serial.println("Updated");
+            Serial.println("got gps!");
             gps.get_position(&lat, &lon, &fix_age);
-            gps.get_datetime(&date, &time, &fix_age);
+            //gps.get_datetime(&date, &time, &fix_age);
+            int year; byte month, day, hour, minute, second, hundredth;
+            Serial.println("cracking...");
+            gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredth, &fix_age);
+            setTime(hour, minute, second, day, month, year);
             sprintf(s, "Lat: %ld Lon: %ld Time: %ld", lat, lon, time);
             Serial.println(s);
-            Serial1.println(s);
-            gpsDidUpdate = 1;
           }
-  }
-  if (gpsDidUpdate > 0 || 1) {
-          gps.get_position(&lat, &lon, &fix_age);
-          gps.get_datetime(&date, &time, &fix_age);
-
-          if (fix_age == TinyGPS::GPS_INVALID_AGE) {
-            Serial.println("No fix detected");
-            //Serial1.println("NFD");
-            Serial.print("Time: ");
-            Serial.println(time);
-          }
-          else if (fix_age > 5000) {
-            Serial.println("Warning: possible stale data!");
-            Serial1.println("Stale");
-          }
-          else {
-            
-          }
+          unsigned long chars; unsigned short sentences, failed_checksum;
+          gps.stats(&chars, &sentences, &failed_checksum);
+          sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
+          Serial.println(s);
+          
   }
 
   //EPS
@@ -138,31 +144,27 @@ void loop() {
   Serial.print("3V3 Current:       "); Serial.print(ina219_3v3.getCurrent_mA()); Serial.println(" mA");
 
   // WOD send
+
+  *((unsigned long*)&transmit[0]) = now();
+  *((unsigned long*)&transmit[4]) = millis();
   
-  long long time_send = 0;
-  if (fix_age == TinyGPS::GPS_INVALID_AGE) {
-    *((int*)&transmit[0]) = millis();
-    *((int*)&transmit[2]) = millis();
-    *((int*)&transmit[4]) = micros();
-    *((int*)&transmit[6]) = micros();
-  } else {
-    time_send = time;
-  }
-  
-  transmit[8] = 0xFF;
-  transmit[9] = 0x00;
+  transmit[8] = mode;
 
   *((float*)&transmit[9]) = ina219_bat.getBusVoltage_V();
   *((float*)&transmit[13]) = ina219_bat.getCurrent_mA();
-  *((float*)&transmit[17]) = 12.34;
+  unsigned int batTemp = analogRead(15);
+  *((float*)&transmit[17]) = 0.0000006*batTemp*batTemp*batTemp - 0.0008*batTemp*batTemp + 0.3892*batTemp - 51.964;
 
   *((float*)&transmit[21]) = ina219_5v.getBusVoltage_V();
   *((float*)&transmit[25]) = ina219_5v.getCurrent_mA();
   *((float*)&transmit[29]) = ina219_3v3.getBusVoltage_V();
   *((float*)&transmit[33]) = ina219_3v3.getCurrent_mA();
-  *((float*)&transmit[37]) = 23.45;
+  unsigned int regTemp = analogRead(14);
+  *((float*)&transmit[37]) = 0.0000006*regTemp*regTemp*regTemp - 0.0008*regTemp*regTemp + 0.3892*regTemp - 51.964;
 
-  *((float*)&transmit[41]) = 34.56;
+  unsigned int rfdTemp = analogRead(39);
+  *((float*)&transmit[41]) = 0.0000006*rfdTemp*rfdTemp*rfdTemp - 0.0008*rfdTemp*rfdTemp + 0.3892*rfdTemp - 51.964;
+
   
   unsigned long fixAge;
 
@@ -186,6 +188,11 @@ void loop() {
   *((float*)&transmit[73]) = IMU.getGyroY_rads();
   *((float*)&transmit[77]) = IMU.getGyroX_rads();
 
+  transmit[81] = gps.satellites();
+  *((unsigned long*)&transmit[82]) = gps.hdop();
+
+  
+
   Serial1.write(0x7E); //flag
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
@@ -193,5 +200,18 @@ void loop() {
   }
   Serial1.write(0x7E); //flag
   
-  //delay(1000);
+  delay(2000);
+  if (transmit[81] != 255) {
+    for (char i = 0; i < transmit[81]; i++) {
+      digitalWrite(13, LOW);
+      delay(20);
+      digitalWrite(13, HIGH);
+      delay(20);
+    }
+  }
+}
+
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
 }

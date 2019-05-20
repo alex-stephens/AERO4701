@@ -15,7 +15,7 @@
     app.use(morgan('combined'));
 
 // start
-    app.listen(httpport);
+    app.listen(httpport, '0.0.0.0');
     console.log("Listening on " + httpport);
 
 // app
@@ -25,8 +25,8 @@
     // });
     app.ws('/ws', function(ws, req) {
         ws.on('message', function(msg) {
-            console.log(msg);
-            //ws.send(msg);
+            console.log("Set mode: " + msg);
+            port.write(msg);
         });
     });
     var ws = expressWs.getWss('/ws');
@@ -37,7 +37,6 @@
     parser.on('data', datain)
 
 
-
 function datain(newbuffer) {
     var char = newbuffer.toString();
     if (char === '~') {
@@ -46,32 +45,35 @@ function datain(newbuffer) {
         buffer = Buffer.concat([buffer, newbuffer]);
         //console.log(buffer.length);
     }
-    if (buffer.length >= 81) {
+    if (buffer.length >= 86) {
         wod = {};
         wod.type = 'wod';
-        //wod.time = buffer.readBigUInt64LE(0); //use when we figure out 8byte timestamp
-        wod.time = buffer.readUInt16LE(0)/1000; //use for now
+        //probably won't use this but here in case... //wod.time = (BigInt(buffer.readUInt32LE(0)<<32) + BigInt(buffer.readUInt32LE(4))).toString(); //use when we figure out 8byte timestamp
+        wod.time = new Date(buffer.readUInt32LE(0)*1000);wod.time = wod.time.toJSON().toString() //unix time, seconds
+        wod.uptime = buffer.readUInt32LE(4); //milliseconds
         wod.mode = buffer.readUInt8(8);
-        wod.vBat = buffer.readFloatLE(9);
-        wod.iBat = buffer.readFloatLE(13);
-        wod.tBat = buffer.readFloatLE(17);
-        wod.v5V = buffer.readFloatLE(21);
-        wod.i5V = buffer.readFloatLE(25);
-        wod.v3V3 = buffer.readFloatLE(29);
-        wod.i3V3 = buffer.readFloatLE(33);
-        wod.tRegs = buffer.readFloatLE(37);
-        wod.tRFD = buffer.readFloatLE(41);
-        wod.lat = buffer.readFloatLE(45);
-        wod.lon = buffer.readFloatLE(49);
-        wod.alt = buffer.readFloatLE(53);
-        wod.yaw = buffer.readFloatLE(57);
-        wod.pitch = buffer.readFloatLE(61);
-        wod.roll = buffer.readFloatLE(65);
-        wod.yawRate = buffer.readFloatLE(69);
-        wod.pitchRate = buffer.readFloatLE(73);
-        wod.rollRate = buffer.readFloatLE(77);
+        wod.vBat = buffer.readFloatLE(9).toFixed(1);
+        wod.iBat = buffer.readFloatLE(13).toFixed(0);
+        wod.tBat = buffer.readFloatLE(17).toFixed(0);
+        wod.v5V = buffer.readFloatLE(21).toFixed(1);
+        wod.i5V = buffer.readFloatLE(25).toFixed(0);
+        wod.v3V3 = buffer.readFloatLE(29).toFixed(1);
+        wod.i3V3 = buffer.readFloatLE(33).toFixed(0);
+        wod.tRegs = buffer.readFloatLE(37).toFixed(0);
+        wod.tRFD = buffer.readFloatLE(41).toFixed(0);
+        wod.lat = buffer.readFloatLE(45).toFixed(5);
+        wod.lon = buffer.readFloatLE(49).toFixed(5);
+        wod.alt = buffer.readFloatLE(53).toFixed(0);
+        wod.yaw = buffer.readFloatLE(57).toFixed(2);
+        wod.pitch = buffer.readFloatLE(61).toFixed(2);
+        wod.roll = buffer.readFloatLE(65).toFixed(2);
+        wod.yawRate = buffer.readFloatLE(69).toFixed(2);
+        wod.pitchRate = buffer.readFloatLE(73).toFixed(2);
+        wod.rollRate = buffer.readFloatLE(77).toFixed(2);
+        wod.sats = buffer.readUInt8(81).toFixed(0);
+        wod.hdop = ((buffer.readUInt32LE(82))/100).toFixed(2);
 
-        console.log(wod)
+        //console.log(wod)
         ws.clients.forEach(function (client) {
             client.send(JSON.stringify(wod));
         });

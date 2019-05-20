@@ -1,25 +1,38 @@
 <html>
 <head>
-  <title>SCEPTRE</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+   integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+   crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+   integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+   crossorigin=""></script>
+   <script src="gs.js" charset="utf-8"></script>
+    <title>SCEPTRE</title>
 </head>
 <body style="height:100%">
   <div id="container" style="position:absolute;top:0;bottom:0;left:0;right:0">
     <div style="padding-left:10px">
-      <h2>SCEPTRE Ground Station</h2>
+    <center>
+      <h1>SCEPTRE Ground Station</h1>
+  </center>
     </div>
-    <div id="left" style="float:left;bottom:0;padding:5px;box-sizing:border-box;width:50%;box-shadow:0px 0px 0px 1px black inset;">
+    <div id="left" style="float:left;bottom:0;padding:5px;box-sizing:border-box;width:25%;box-shadow:0px 0px 0px 1px black inset;">
       <h3>Monitoring & Whole Orbit Data</h3>
-      <table border="true">
+      <table border="true" style="width:100%;column-width:20%;table-layout:fixed">
         <tr>
           <th>Parameter</th>
           <th>Value</th>
         </tr>
         <tr>
-          <th colspan="2">Bus</th>
+          <th colspan="2">OBC</th>
         </tr>
         <tr>
-          <td>Time</td>
+          <td>Date</td>
           <td id="wod_time"></td>
+        </tr>
+        <tr>
+          <td>Uptime</td>
+          <td id="wod_uptime"></td>
         </tr>
         <tr>
           <td>Mode</td>
@@ -89,6 +102,14 @@
           <td id="wod_alt"></td>
         </tr>
         <tr>
+          <td>Satellites</td>
+          <td id="wod_sats"></td>
+        </tr>
+        <tr>
+          <td>HDOP</td>
+          <td id="wod_hdop"></td>
+        </tr>
+        <tr>
           <th colspan="2">Attitude</th>
         </tr>
         <tr>
@@ -117,15 +138,20 @@
         </tr>
       </table>
     </div>
-    <div id="right" style="float:right;bottom:0;padding:5px;box-sizing:border-box;width:50%;box-shadow:0px 0px 0px 1px black inset;">
+    <div id="midleft" style="float:left;bottom:0;padding:5px;box-sizing:border-box;width:50%;box-shadow:0px 0px 0px 1px black inset;">
+        <div id="map" style="height:80%;width:100%"></div>
+    </div>
+    <div id="right" style="float:right;bottom:0;padding:5px;box-sizing:border-box;width:25%;box-shadow:0px 0px 0px 1px black inset;">
       <div id="topright" style="">
         <h3>Payload</h3>
       </div>
       <div id="bottomright" style="">
         <h3>Command & Control</h3>
+        Mode:
+        <input type="text" id="cc_mode" value="" maxlength="1">
+        <button onclick="changeMode()">Set</button>
       </div>
     </div>
   </div>
 </body>
-<script src="gs.js" charset="utf-8"></script>
 <html>

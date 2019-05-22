@@ -89,71 +89,42 @@ void setup() {
 }
 
 
-//LOOP
 void loop() {
-  //C&C
+  // C&C
   while (Serial1.available()) {
     mode = Serial1.read();
   }
   digitalWrite(13, HIGH); // mode&0x01);
   
-  //IMU
-  IMU.readSensor();
-  // display the data
-  Serial.print(IMU.getAccelX_mss(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getAccelY_mss(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getAccelZ_mss(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getGyroX_rads(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getGyroY_rads(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getGyroZ_rads(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getMagX_uT(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getMagY_uT(),6);
-  Serial.print("\t");
-  Serial.print(IMU.getMagZ_uT(),6);
-  Serial.print("\t");
-  Serial.println(IMU.getTemperature_C(),6);
+  // GPS
+  printGPSdata();
 
-  //GPS
-  while (Serial2.available() > 0) {
-          // read the incoming byte:
-          char c = Serial2.read();
-          
-          if (gps.encode(c)) {
-            Serial.println("got gps!");
-            gps.get_position(&lat, &lon, &fix_age);
-            //gps.get_datetime(&date, &time, &fix_age);
-            int year; byte month, day, hour, minute, second, hundredth;
-            Serial.println("cracking...");
-            gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredth, &fix_age);
-            setTime(hour, minute, second, day, month, year);
-            sprintf(s, "Lat: %ld Lon: %ld Time: %ld", lat, lon, time);
-            Serial.println(s);
-          }
-          unsigned long chars; unsigned short sentences, failed_checksum;
-          gps.stats(&chars, &sentences, &failed_checksum);
-          sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
-          Serial.println(s);
-          
+  // EPS
+  printEPSdata();
+
+  // FIll the buffer & transmit
+  getWOD();
+  transmitWOD();
+  
+  delay(2000);
+  if (transmit[81] != 255) {
+    for (char i = 0; i < transmit[81]; i++) {
+      digitalWrite(13, LOW);
+      delay(20);
+      digitalWrite(13, HIGH);
+      delay(20);
+    }
   }
+}
 
-  //EPS
+time_t getTeensy3Time()
+{
+  return Teensy3Clock.get();
+}
 
-  
-  
-  Serial.print("Battery Voltage:   "); Serial.print(ina219_bat.getBusVoltage_V()); Serial.println(" V");
-  Serial.print("Battery Current:       "); Serial.print(ina219_bat.getCurrent_mA()); Serial.println(" mA");
-  Serial.print("5V Voltage:   "); Serial.print(ina219_5v.getBusVoltage_V()); Serial.println(" V");
-  Serial.print("5V Current:       "); Serial.print(ina219_5v.getCurrent_mA()); Serial.println(" mA");
-  Serial.print("3V3 Voltage:   "); Serial.print(ina219_3v3.getBusVoltage_V()); Serial.println(" V");
-  Serial.print("3V3 Current:       "); Serial.print(ina219_3v3.getCurrent_mA()); Serial.println(" mA");
 
+
+void getWOD() {
   // WOD send
 
   *((unsigned long*)&transmit[0]) = now();
@@ -200,29 +171,73 @@ void loop() {
   *((float*)&transmit[77]) = IMU.getGyroX_rads();
 
   transmit[81] = gps.satellites();
-  *((unsigned long*)&transmit[82]) = gps.hdop();
+  *((unsigned long*)&transmit[82]) = gps.hdop();  
+}
 
+
+void printEPSdata() {
+  Serial.print("Battery Voltage:   "); Serial.print(ina219_bat.getBusVoltage_V()); Serial.println(" V");
+  Serial.print("Battery Current:       "); Serial.print(ina219_bat.getCurrent_mA()); Serial.println(" mA");
+  Serial.print("5V Voltage:   "); Serial.print(ina219_5v.getBusVoltage_V()); Serial.println(" V");
+  Serial.print("5V Current:       "); Serial.print(ina219_5v.getCurrent_mA()); Serial.println(" mA");
+  Serial.print("3V3 Voltage:   "); Serial.print(ina219_3v3.getBusVoltage_V()); Serial.println(" V");
+  Serial.print("3V3 Current:       "); Serial.print(ina219_3v3.getCurrent_mA()); Serial.println(" mA");
+}
+
+
+void printIMUdata() {
+  IMU.readSensor();
   
+  // display the data
+  Serial.print(IMU.getAccelX_mss(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getAccelY_mss(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getAccelZ_mss(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getGyroX_rads(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getGyroY_rads(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getGyroZ_rads(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getMagX_uT(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getMagY_uT(),6);
+  Serial.print("\t");
+  Serial.print(IMU.getMagZ_uT(),6);
+  Serial.print("\t");
+  Serial.println(IMU.getTemperature_C(),6); 
+}
 
+void printGPSdata() {
+    while (Serial2.available() > 0) {
+          // read the incoming byte:
+          char c = Serial2.read();
+          
+          if (gps.encode(c)) {
+            Serial.println("got gps!");
+            gps.get_position(&lat, &lon, &fix_age);
+            //gps.get_datetime(&date, &time, &fix_age);
+            int year; byte month, day, hour, minute, second, hundredth;
+            Serial.println("cracking...");
+            gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredth, &fix_age);
+            setTime(hour, minute, second, day, month, year);
+            sprintf(s, "Lat: %ld Lon: %ld Time: %ld", lat, lon, time);
+            Serial.println(s);
+          }
+          unsigned long chars; unsigned short sentences, failed_checksum;
+          gps.stats(&chars, &sentences, &failed_checksum);
+          sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
+          Serial.println(s);    
+  }
+}
+
+void transmitWOD() {
   Serial1.write(0x7E); //flag
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
     Serial.write(transmit[i]);
   }
   Serial1.write(0x7E); //flag
-  
-  delay(2000);
-  if (transmit[81] != 255) {
-    for (char i = 0; i < transmit[81]; i++) {
-      digitalWrite(13, LOW);
-      delay(20);
-      digitalWrite(13, HIGH);
-      delay(20);
-    }
-  }
-}
-
-time_t getTeensy3Time()
-{
-  return Teensy3Clock.get();
 }

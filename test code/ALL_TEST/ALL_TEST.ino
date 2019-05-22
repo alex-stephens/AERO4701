@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 #include <TinyGPS.h>
+#include <L298N.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
 
@@ -32,6 +33,10 @@ Adafruit_INA219 ina219_5v(0x44);
 //TRANSMIT BUFFER
 char transmit[WOD_TRANSMIT_BUF_LEN];
 
+// MOTOR DRIVERS
+L298N motorX(2, 24, -1); // -1 for unused pins
+L298N motorY(5, 25, -1);
+L298N motorZ(6, 26, -1);
 
 //SETUP
 void setup() {
@@ -74,7 +79,13 @@ void setup() {
   ina219_bat.begin();
   ina219_5v.begin();
   ina219_3v3.begin();
-  
+
+  // MOTOR - use setSpeed(0-255) then run forward() or backward()
+//  motorX.setSpeed(100);
+//  motorX.forward();
+//  delay(3000);
+//  motorX.backward();
+//  delay(3000);
 }
 
 
@@ -84,7 +95,7 @@ void loop() {
   while (Serial1.available()) {
     mode = Serial1.read();
   }
-  digitalWrite(13, mode&0x01);
+  digitalWrite(13, HIGH); // mode&0x01);
   
   //IMU
   IMU.readSensor();

@@ -211,6 +211,28 @@ void updateADCS() {
   Serial.println(x++);
 }
 
+void setMotorSpeed(L298N& motor, int newSpeed) {
+
+  // max input
+  if (newSpeed > 255) {
+    newSpeed = 255;
+  } 
+  else if (newSpeed < -255) {
+    newSpeed = -255;
+  }
+
+  // update the speed
+  motor.setSpeed(abs(newSpeed));
+
+  // set the direction
+  if (newSpeed >= 0) {
+    motor.forward();
+  }
+  else {
+    motor.backward();
+  }
+}
+
 void printEPSdata() {
   Serial.print("Battery Voltage:   "); Serial.print(ina219_bat.getBusVoltage_V()); Serial.println(" V");
   Serial.print("Battery Current:       "); Serial.print(ina219_bat.getCurrent_mA()); Serial.println(" mA");

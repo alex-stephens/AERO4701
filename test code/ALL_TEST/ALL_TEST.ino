@@ -1,5 +1,6 @@
 #include <Time.h>
 #include <TimeLib.h>
+#include <TimedAction.h>
 #include "Arduino.h"
 #include "MPU9250.h" // from Bolder Flight Systems MPU9250
 #include <Wire.h>
@@ -8,7 +9,6 @@
 #include <L298N.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
-
 
 //GLOBALS
 
@@ -37,6 +37,14 @@ char transmit[WOD_TRANSMIT_BUF_LEN];
 L298N motorX(2, 24, -1); // -1 for unused pins
 L298N motorY(5, 25, -1);
 L298N motorZ(6, 26, -1);
+
+// Main timed events
+TimedAction telemetryTimedAction = TimedAction(1000, transmitWOD);
+TimedAction ADCSTimedAction = TimedAction(100, updateADCS);
+
+// Other timed events
+TimedAction debugPrintTimedAction = TimedAction(1000, debugPrint);
+
 
 //SETUP
 void setup() {
@@ -86,35 +94,39 @@ void setup() {
 //  delay(3000);
 //  motorX.backward();
 //  delay(3000);
+
+
+  // set time intervals for all timed actions
+  telemetryTimedAction.setInterval(1000);
+  ADCSTimedAction.setInterval(100);
+  
+  debugPrintTimedAction.setInterval(5000);
 }
 
 
 void loop() {
+  
   // C&C
   while (Serial1.available()) {
     mode = Serial1.read();
   }
-  digitalWrite(13, HIGH); // mode&0x01);
-  
-  // GPS
-  printGPSdata();
+//  digitalWrite(13, HIGH); // mode&0x01);
 
-  // EPS
-  printEPSdata();
+  // check which timed actions to execute
+  telemetryTimedAction.check();
+  ADCSTimedAction.check();
+  debugPrintTimedAction.check();
 
-  // FIll the buffer & transmit
-  getWOD();
-  transmitWOD();
-  
-  delay(2000);
-  if (transmit[81] != 255) {
-    for (char i = 0; i < transmit[81]; i++) {
-      digitalWrite(13, LOW);
-      delay(20);
-      digitalWrite(13, HIGH);
-      delay(20);
-    }
-  }
+//  // flash LEDs for number of GPS satellites
+//  delay(2000);
+//  if (transmit[81] != 255) {
+//    for (char i = 0; i < transmit[81]; i++) {
+//      digitalWrite(13, LOW);
+//      delay(20);
+//      digitalWrite(13, HIGH);
+//      delay(20);
+//    }
+//  }
 }
 
 time_t getTeensy3Time()
@@ -122,7 +134,26 @@ time_t getTeensy3Time()
   return Teensy3Clock.get();
 }
 
+void debugPrint() {
+  // GPS
+  printGPSdata();
 
+  // EPS
+  printEPSdata();
+}
+
+
+void transmitWOD() {
+  getWOD();
+  
+  Serial1.write(0x7E); //flag
+  for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
+    Serial1.write(transmit[i]);
+    Serial.write(transmit[i]);
+  }
+  Serial1.write(0x7E); //flag
+  Serial.write('\n');
+}
 
 void getWOD() {
   // WOD send
@@ -174,6 +205,11 @@ void getWOD() {
   *((unsigned long*)&transmit[82]) = gps.hdop();  
 }
 
+void updateADCS() {
+  static int x = 0;
+  Serial.print("ADCS update ");
+  Serial.println(x++);
+}
 
 void printEPSdata() {
   Serial.print("Battery Voltage:   "); Serial.print(ina219_bat.getBusVoltage_V()); Serial.println(" V");
@@ -231,13 +267,4 @@ void printGPSdata() {
           sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
           Serial.println(s);    
   }
-}
-
-void transmitWOD() {
-  Serial1.write(0x7E); //flag
-  for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
-    Serial1.write(transmit[i]);
-    Serial.write(transmit[i]);
-  }
-  Serial1.write(0x7E); //flag
 }

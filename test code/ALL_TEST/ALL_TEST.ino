@@ -9,6 +9,7 @@
 #include <L298N.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
+#define ADCS_BUF_LEN (100)
 
 //GLOBALS
 
@@ -39,11 +40,23 @@ L298N motorY(5, 25, -1);
 L298N motorZ(6, 26, -1);
 
 // Main timed events
-TimedAction telemetryTimedAction = TimedAction(1000, transmitWOD);
-TimedAction ADCSTimedAction = TimedAction(100, updateADCS);
+TimedAction telemetryThread = TimedAction(1000, transmitWOD);
+TimedAction ADCSThread = TimedAction(100, updateADCS);
 
 // Other timed events
-TimedAction debugPrintTimedAction = TimedAction(1000, debugPrint);
+TimedAction debugPrintThread = TimedAction(1000, debugPrint);
+
+// ADCS control gains
+int Kp = 200, Kd = 1, Ki = 0;
+
+// ADCS buffers (integral control) 
+float ADCS_wx_err[ADCS_BUF_LEN];
+float ADCS_wy_err[ADCS_BUF_LEN];
+float ADCS_wz_err[ADCS_BUF_LEN];
+float ADCS_wx_integral = 0;
+float ADCS_wy_integral = 0;
+float ADCS_wz_integral = 0;
+
 
 
 //SETUP
@@ -91,16 +104,18 @@ void setup() {
   // MOTOR - use setSpeed(0-255) then run forward() or backward()
 //  motorX.setSpeed(100);
 //  motorX.forward();
-//  delay(3000);
+  delay(3000);
 //  motorX.backward();
-//  delay(3000);
+//  set
+//  setMotorSpeed(motorX, -100);
+  delay(3000);
 
 
   // set time intervals for all timed actions
-  telemetryTimedAction.setInterval(1000);
-  ADCSTimedAction.setInterval(100);
+  telemetryThread.setInterval(1000);
+  ADCSThread.setInterval(100);
   
-  debugPrintTimedAction.setInterval(5000);
+  debugPrintThread.setInterval(200);
 }
 
 
@@ -112,10 +127,10 @@ void loop() {
   }
 //  digitalWrite(13, HIGH); // mode&0x01);
 
-  // check which timed actions to execute
-  telemetryTimedAction.check();
-  ADCSTimedAction.check();
-  debugPrintTimedAction.check();
+  // check which threads to execute
+//  telemetryThread.check();
+  ADCSThread.check();
+  debugPrintThread.check();
 
 //  // flash LEDs for number of GPS satellites
 //  delay(2000);
@@ -129,6 +144,11 @@ void loop() {
 //  }
 }
 
+
+// ---------------------------------------------------------------- //
+
+
+
 time_t getTeensy3Time()
 {
   return Teensy3Clock.get();
@@ -136,10 +156,21 @@ time_t getTeensy3Time()
 
 void debugPrint() {
   // GPS
-  printGPSdata();
+//  printGPSdata();
 
   // EPS
-  printEPSdata();
+//  printEPSdata();
+
+  // IMU 
+//  printIMUdata();
+  IMU.readSensor();
+  Serial.print("Gyro - X:");
+  Serial.print(IMU.getGyroX_rads(),6);
+  Serial.print("\tY: ");
+  Serial.print(IMU.getGyroY_rads(),6);
+  Serial.print("\tZ: ");
+  Serial.println(IMU.getGyroZ_rads(),6);
+  
 }
 
 
@@ -206,9 +237,36 @@ void getWOD() {
 }
 
 void updateADCS() {
-  static int x = 0;
-  Serial.print("ADCS update ");
-  Serial.println(x++);
+  // index to insert into buffer
+  static int i = 0;
+  int wx, wy, wz;
+  int inX, inY, inZ;
+
+  wx = IMU.getGyroX_rads(); 
+  wy = IMU.getGyroY_rads(); 
+  wz = IMU.getGyroZ_rads(); 
+
+  // add new term to integral and remove oldest term
+  ADCS_wx_integral += wx - (ADCS_wx_err[i]);
+  ADCS_wy_integral += wy - (ADCS_wy_err[i]);
+  ADCS_wz_integral += wz - (ADCS_wz_err[i]);
+
+  // update integral buffers
+  ADCS_wx_err[i] = wx;
+  ADCS_wy_err[i] = wy;
+  ADCS_wz_err[i] = wz;
+
+  // calculate control values (PI control)
+  inX = - (Kp * wx) - (Ki * ADCS_wx_integral);
+  inY = - (Kp * wy) - (Ki * ADCS_wy_integral);
+  inZ = - (Kp * wz) - (Ki * ADCS_wz_integral);
+
+  // set motor speeds
+  setMotorSpeed(motorX, inX);
+  setMotorSpeed(motorY, inY);
+  setMotorSpeed(motorZ, inZ);
+
+  i = (i+1) % ADCS_BUF_LEN;
 }
 
 void setMotorSpeed(L298N& motor, int newSpeed) {

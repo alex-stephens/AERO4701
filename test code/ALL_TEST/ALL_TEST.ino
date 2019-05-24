@@ -11,10 +11,23 @@
 #define WOD_TRANSMIT_BUF_LEN (86)
 #define ADCS_BUF_LEN (100)
 
+
+// MAIN OPERATION MODES
+#define MODE_OPERATIONAL 0
+#define MODE_DOWNLINK 1
+#define MODE_DETUMBLE 2
+#define MODE_DEPLOYMENT 3
+#define MODE_SAFE 4
+#define MODE_LAUNCH 5
+
+// OTHER MODES
+#define MODE_STARTUP 6
+#define MODE_TESTING 7 // for any debugging stuff we want to do
+
+unsigned char mode;
+
 //GLOBALS
 
-//GENERIC
-unsigned char mode;
 
 //IMU
 MPU9250 IMU(Wire1,0x68);
@@ -49,7 +62,7 @@ TimedAction debugPrintThread = TimedAction(1000, debugPrint);
 // ADCS control gains
 int Kp = 200, Kd = 1, Ki = 0;
 
-// ADCS buffers (integral control) 
+// ADCS buffers (integral control)
 float ADCS_wx_err[ADCS_BUF_LEN];
 float ADCS_wy_err[ADCS_BUF_LEN];
 float ADCS_wz_err[ADCS_BUF_LEN];
@@ -71,7 +84,6 @@ void setup() {
   setTime(0);
 
   pinMode(13, OUTPUT);
-  mode = 0;
   digitalWrite(13, LOW);
 
   analogReference(0);
@@ -79,8 +91,8 @@ void setup() {
   pinMode(14, INPUT);
   pinMode(15, INPUT);
   pinMode(39, INPUT);
-  
-  //IMU 
+
+  //IMU
   imuStatus = IMU.begin();
   if (imuStatus < 0) {
     Serial.println("IMU initialization unsuccessful");
@@ -114,23 +126,63 @@ void setup() {
   // set time intervals for all timed actions
   telemetryThread.setInterval(1000);
   ADCSThread.setInterval(100);
-  
   debugPrintThread.setInterval(200);
+
+  // set the initial operating mode
+  mode = MODE_TESTING;
 }
+
+// ---------------------------------------------------------------- //
+//                             MAIN LOOP                            //
+// ---------------------------------------------------------------- //
 
 
 void loop() {
-  
+
   // C&C
   while (Serial1.available()) {
     mode = Serial1.read();
   }
 //  digitalWrite(13, HIGH); // mode&0x01);
 
-  // check which threads to execute
-//  telemetryThread.check();
-  ADCSThread.check();
-  debugPrintThread.check();
+  switch (mode) {
+    case MODE_OPERATIONAL :
+      modeOperational();
+      break;
+
+    case MODE_DOWNLINK :
+      modeDownlink();
+      break;
+
+    case MODE_DETUMBLE :
+      modeDetumble();
+      break;
+
+    case MODE_DEPLOYMENT :
+      modeDeployment();
+      break;
+
+    case MODE_SAFE :
+      modeSafe();
+      break;
+
+    case MODE_LAUNCH :
+      modeLaunch();
+      break;
+
+    case MODE_STARTUP :
+      modeStartup();
+      break;
+
+    case MODE_TESTING :
+      modeTesting();
+      break;
+
+    default :
+      Serial.println("Invalid mode :( ");
+      delay(1000);
+      break;
+  }
 
 //  // flash LEDs for number of GPS satellites
 //  delay(2000);
@@ -144,9 +196,60 @@ void loop() {
 //  }
 }
 
-
+// ---------------------------------------------------------------- //
+//                       OPERATIONAL MODES                          //
 // ---------------------------------------------------------------- //
 
+void modeOperational() {
+  telemetryThread.check();
+  ADCSThread.check();
+}
+
+void modeDownlink() {
+  telemetryThread.check();
+}
+
+void modeDetumble() {
+  telemetryThread.check();
+  ADCSThread.check();
+}
+
+void modeDeployment() {
+
+}
+
+void modeSafe() {
+
+}
+
+void modeLaunch() {
+
+}
+
+void modeStartup() {
+
+}
+
+void modeTesting() {
+  telemetryThread.check();
+  ADCSThread.check();
+
+  // gyro print
+  IMU.readSensor();
+  Serial.print("Gyro - X:");
+  Serial.print(IMU.getGyroX_rads(),6);
+  Serial.print("\tY: ");
+  Serial.print(IMU.getGyroY_rads(),6);
+  Serial.print("\tZ: ");
+  Serial.println(IMU.getGyroZ_rads(),6);
+
+
+}
+
+
+// ---------------------------------------------------------------- //
+//                       HELPER FUNCTIONS                           //
+// ---------------------------------------------------------------- //
 
 
 time_t getTeensy3Time()
@@ -161,22 +264,14 @@ void debugPrint() {
   // EPS
 //  printEPSdata();
 
-  // IMU 
-//  printIMUdata();
-  IMU.readSensor();
-  Serial.print("Gyro - X:");
-  Serial.print(IMU.getGyroX_rads(),6);
-  Serial.print("\tY: ");
-  Serial.print(IMU.getGyroY_rads(),6);
-  Serial.print("\tZ: ");
-  Serial.println(IMU.getGyroZ_rads(),6);
-  
+  // IMU
+  printIMUdata();
 }
 
 
 void transmitWOD() {
   getWOD();
-  
+
   Serial1.write(0x7E); //flag
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
@@ -191,7 +286,7 @@ void getWOD() {
 
   *((unsigned long*)&transmit[0]) = now();
   *((unsigned long*)&transmit[4]) = millis();
-  
+
   transmit[8] = mode;
 
   *((float*)&transmit[9]) = ina219_bat.getBusVoltage_V();
@@ -209,7 +304,7 @@ void getWOD() {
   unsigned int rfdTemp = analogRead(39);
   *((float*)&transmit[41]) = 0.0000006*rfdTemp*rfdTemp*rfdTemp - 0.0008*rfdTemp*rfdTemp + 0.3892*rfdTemp - 51.964;
 
-  
+
   unsigned long fixAge;
 
   float latitude, longitude;
@@ -233,7 +328,7 @@ void getWOD() {
   *((float*)&transmit[77]) = IMU.getGyroX_rads();
 
   transmit[81] = gps.satellites();
-  *((unsigned long*)&transmit[82]) = gps.hdop();  
+  *((unsigned long*)&transmit[82]) = gps.hdop();
 }
 
 void updateADCS() {
@@ -242,9 +337,9 @@ void updateADCS() {
   int wx, wy, wz;
   int inX, inY, inZ;
 
-  wx = IMU.getGyroX_rads(); 
-  wy = IMU.getGyroY_rads(); 
-  wz = IMU.getGyroZ_rads(); 
+  wx = IMU.getGyroX_rads();
+  wy = IMU.getGyroY_rads();
+  wz = IMU.getGyroZ_rads();
 
   // add new term to integral and remove oldest term
   ADCS_wx_integral += wx - (ADCS_wx_err[i]);
@@ -274,7 +369,7 @@ void setMotorSpeed(L298N& motor, int newSpeed) {
   // max input
   if (newSpeed > 255) {
     newSpeed = 255;
-  } 
+  }
   else if (newSpeed < -255) {
     newSpeed = -255;
   }
@@ -303,7 +398,7 @@ void printEPSdata() {
 
 void printIMUdata() {
   IMU.readSensor();
-  
+
   // display the data
   Serial.print(IMU.getAccelX_mss(),6);
   Serial.print("\t");
@@ -323,14 +418,14 @@ void printIMUdata() {
   Serial.print("\t");
   Serial.print(IMU.getMagZ_uT(),6);
   Serial.print("\t");
-  Serial.println(IMU.getTemperature_C(),6); 
+  Serial.println(IMU.getTemperature_C(),6);
 }
 
 void printGPSdata() {
     while (Serial2.available() > 0) {
           // read the incoming byte:
           char c = Serial2.read();
-          
+
           if (gps.encode(c)) {
             Serial.println("got gps!");
             gps.get_position(&lat, &lon, &fix_age);
@@ -345,6 +440,6 @@ void printGPSdata() {
           unsigned long chars; unsigned short sentences, failed_checksum;
           gps.stats(&chars, &sentences, &failed_checksum);
           sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
-          Serial.println(s);    
+          Serial.println(s);
   }
 }

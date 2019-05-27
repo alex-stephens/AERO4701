@@ -53,10 +53,13 @@ L298N motorY(5, 25, -1);
 L298N motorZ(6, 26, -1);
 
 // Main timed events
+void transmitWOD();
+void updateADCS();
 TimedAction telemetryThread = TimedAction(1000, transmitWOD);
 TimedAction ADCSThread = TimedAction(100, updateADCS);
 
 // Other timed events
+void debugPrint();
 TimedAction debugPrintThread = TimedAction(1000, debugPrint);
 
 // ADCS control gains
@@ -93,13 +96,10 @@ void setup() {
   pinMode(39, INPUT);
 
   //IMU
-  imuStatus = IMU.begin();
-  if (imuStatus < 0) {
+  while (IMU.begin() < 0) {
     Serial.println("IMU initialization unsuccessful");
     Serial.println("Check IMU wiring or try cycling power");
-    Serial.print("imuStatus: ");
-    Serial.println(imuStatus);
-    while(1) {}
+    delay(500);
   }
 
   //GPS

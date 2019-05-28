@@ -5,7 +5,7 @@
 #include "MPU9250.h" // from Bolder Flight Systems MPU9250
 #include <Wire.h>
 #include <Adafruit_INA219.h>
-#include <TinyGPS.h>
+#include <TinyGPS++.h>
 #include <L298N.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
@@ -34,7 +34,8 @@ MPU9250 IMU(Wire1,0x68);
 int imuStatus;
 
 //GPS
-TinyGPS gps;
+TinyGPSPlus gps;
+TinyGPSCustom numSat(gps, "GPGSV", 3);
 char s[80];
 long lat, lon;
 unsigned long fix_age, time, date;
@@ -96,11 +97,11 @@ void setup() {
   pinMode(39, INPUT);
 
   //IMU
-  while (IMU.begin() < 0) {
-    Serial.println("IMU initialization unsuccessful");
-    Serial.println("Check IMU wiring or try cycling power");
-    delay(500);
-  }
+//  while (IMU.begin() < 0) {
+//    Serial.println("IMU initialization unsuccessful");
+//    Serial.println("Check IMU wiring or try cycling power");
+//    delay(500);
+//  }
 
   //GPS
   Serial2.begin(115200);
@@ -138,6 +139,7 @@ void setup() {
 
 
 void loop() {
+
 
   // C&C
   while (Serial1.available()) {
@@ -304,20 +306,15 @@ void getWOD() {
   unsigned int rfdTemp = analogRead(39);
   *((float*)&transmit[41]) = 0.0000006*rfdTemp*rfdTemp*rfdTemp - 0.0008*rfdTemp*rfdTemp + 0.3892*rfdTemp - 51.964;
 
-
-  unsigned long fixAge;
-
-  float latitude, longitude;
-  gps.f_get_position(&latitude, &longitude, &fixAge);
-
-  if (fixAge == TinyGPS::GPS_INVALID_AGE) {
+  
+  if (gps.location.age() == (uint32_t)ULONG_MAX) {
     *((float*)&transmit[45]) = 360.0;
     *((float*)&transmit[49]) = 360.0;
     *((float*)&transmit[53]) = -1.0;
   } else {
-    *((float*)&transmit[45]) = latitude;
-    *((float*)&transmit[49]) = longitude;
-    *((float*)&transmit[53]) = gps.f_altitude();
+    *((float*)&transmit[45]) = gps.location.lat();;
+    *((float*)&transmit[49]) = gps.location.lng();
+    *((float*)&transmit[53]) = gps.altitude.meters();
   }
 
   *((float*)&transmit[57]) = 45.67;
@@ -327,8 +324,8 @@ void getWOD() {
   *((float*)&transmit[73]) = IMU.getGyroY_rads();
   *((float*)&transmit[77]) = IMU.getGyroX_rads();
 
-  transmit[81] = gps.satellites();
-  *((unsigned long*)&transmit[82]) = gps.hdop();
+  transmit[81] = gps.satellites.value();
+  *((unsigned long*)&transmit[82]) = gps.hdop.value();
 }
 
 void updateADCS() {
@@ -422,24 +419,20 @@ void printIMUdata() {
 }
 
 void printGPSdata() {
+
+
+    
     while (Serial2.available() > 0) {
           // read the incoming byte:
           char c = Serial2.read();
-
           if (gps.encode(c)) {
-            Serial.println("got gps!");
-            gps.get_position(&lat, &lon, &fix_age);
-            //gps.get_datetime(&date, &time, &fix_age);
-            int year; byte month, day, hour, minute, second, hundredth;
-            Serial.println("cracking...");
-            gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredth, &fix_age);
-            setTime(hour, minute, second, day, month, year);
-            sprintf(s, "Lat: %ld Lon: %ld Time: %ld", lat, lon, time);
+            Serial.println("god gps!");
+
+            setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year()); 
+            
+            sprintf(s, "Lat: %ld, Lon: %ld, Time: %ld", gps.location.lat(), gps.location.lng(), gps.time.value());
             Serial.println(s);
           }
-          unsigned long chars; unsigned short sentences, failed_checksum;
-          gps.stats(&chars, &sentences, &failed_checksum);
-          sprintf(s, "chars: %ld sentences: %ld failed checks: %ld", chars, sentences, failed_checksum);
-          Serial.println(s);
+            
   }
 }

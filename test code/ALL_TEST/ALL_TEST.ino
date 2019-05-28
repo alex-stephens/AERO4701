@@ -63,6 +63,10 @@ TimedAction ADCSThread = TimedAction(100, updateADCS);
 void debugPrint();
 TimedAction debugPrintThread = TimedAction(1000, debugPrint);
 
+void readGPSdata();
+void printGPSdata();
+TimedAction readGPSdataThread = TimedAction(1, readGPSdata);
+
 // ADCS control gains
 int Kp = 200, Kd = 1, Ki = 0;
 
@@ -96,12 +100,12 @@ void setup() {
   pinMode(15, INPUT);
   pinMode(39, INPUT);
 
-  //IMU
-//  while (IMU.begin() < 0) {
-//    Serial.println("IMU initialization unsuccessful");
-//    Serial.println("Check IMU wiring or try cycling power");
-//    delay(500);
-//  }
+  // IMU
+  while (IMU.begin() < 0) {
+    Serial.println("IMU initialization unsuccessful");
+    Serial.println("Check IMU wiring or try cycling power");
+    delay(500);
+  }
 
   //GPS
   Serial2.begin(115200);
@@ -127,7 +131,8 @@ void setup() {
   // set time intervals for all timed actions
   telemetryThread.setInterval(1000);
   ADCSThread.setInterval(100);
-  debugPrintThread.setInterval(200);
+  debugPrintThread.setInterval(1000);
+  readGPSdataThread.setInterval(1);
 
   // set the initial operating mode
   mode = MODE_TESTING;
@@ -139,13 +144,13 @@ void setup() {
 
 
 void loop() {
-
-
+ 
   // C&C
   while (Serial1.available()) {
     mode = Serial1.read();
   }
-//  digitalWrite(13, HIGH); // mode&0x01);
+
+
 
   switch (mode) {
     case MODE_OPERATIONAL :
@@ -235,16 +240,17 @@ void modeStartup() {
 void modeTesting() {
   telemetryThread.check();
   ADCSThread.check();
+  debugPrintThread.check();
+  readGPSdataThread.check();
 
   // gyro print
   IMU.readSensor();
-  Serial.print("Gyro - X:");
-  Serial.print(IMU.getGyroX_rads(),6);
-  Serial.print("\tY: ");
-  Serial.print(IMU.getGyroY_rads(),6);
-  Serial.print("\tZ: ");
-  Serial.println(IMU.getGyroZ_rads(),6);
-
+//  Serial.print("Gyro - X:");
+//  Serial.print(IMU.getGyroX_rads(),6);
+//  Serial.print("\tY: ");
+//  Serial.print(IMU.getGyroY_rads(),6);
+//  Serial.print("\tZ: ");
+//  Serial.println(IMU.getGyroZ_rads(),6);
 
 }
 
@@ -260,11 +266,16 @@ time_t getTeensy3Time()
 }
 
 void debugPrint() {
+
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  
   // GPS
-//  printGPSdata();
+  printGPSdata();
 
   // EPS
-//  printEPSdata();
+  printEPSdata();
 
   // IMU
   printIMUdata();
@@ -273,7 +284,7 @@ void debugPrint() {
 
 void transmitWOD() {
   getWOD();
-
+  
   Serial1.write(0x7E); //flag
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
@@ -307,12 +318,12 @@ void getWOD() {
   *((float*)&transmit[41]) = 0.0000006*rfdTemp*rfdTemp*rfdTemp - 0.0008*rfdTemp*rfdTemp + 0.3892*rfdTemp - 51.964;
 
   
-  if (gps.location.age() == (uint32_t)ULONG_MAX) {
+  if (gps.satellites.value() == 0) {
     *((float*)&transmit[45]) = 360.0;
     *((float*)&transmit[49]) = 360.0;
     *((float*)&transmit[53]) = -1.0;
   } else {
-    *((float*)&transmit[45]) = gps.location.lat();;
+    *((float*)&transmit[45]) = gps.location.lat();
     *((float*)&transmit[49]) = gps.location.lng();
     *((float*)&transmit[53]) = gps.altitude.meters();
   }
@@ -418,21 +429,18 @@ void printIMUdata() {
   Serial.println(IMU.getTemperature_C(),6);
 }
 
-void printGPSdata() {
-
-
-    
-    while (Serial2.available() > 0) {
-          // read the incoming byte:
-          char c = Serial2.read();
-          if (gps.encode(c)) {
-            Serial.println("god gps!");
-
-            setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year()); 
-            
-            sprintf(s, "Lat: %ld, Lon: %ld, Time: %ld", gps.location.lat(), gps.location.lng(), gps.time.value());
-            Serial.println(s);
-          }
-            
+void readGPSdata() {
+  while (Serial2.available() > 0) {
+    // read the incoming byte:
+    char c = Serial2.read();
+    gps.encode(c);
+    if (gps.location.isUpdated()) {
+      setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year()); 
+    }
   }
+}
+
+void printGPSdata() {
+    sprintf(s, "Lat: %ld, Lon: %ld, Time: %ld", gps.location.lat(), gps.location.lng(), gps.time.value());
+    Serial.println(s);       
 }

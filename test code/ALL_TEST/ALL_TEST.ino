@@ -25,6 +25,7 @@
 #define MODE_TESTING 7 // for any debugging stuff we want to do
 
 unsigned char mode;
+unsigned char prevMode;
 
 //GLOBALS
 
@@ -136,6 +137,7 @@ void setup() {
 
   // set the initial operating mode
   mode = MODE_TESTING;
+  prevMode = mode;
 }
 
 // ---------------------------------------------------------------- //
@@ -149,6 +151,9 @@ void loop() {
   while (Serial1.available()) {
     mode = Serial1.read();
   }
+
+  // mode transition handler
+  modeTransition(prevMode, mode);
 
 
 
@@ -201,11 +206,37 @@ void loop() {
 //      delay(20);
 //    }
 //  }
+
+  prevMode = mode;
 }
 
 // ---------------------------------------------------------------- //
 //                       OPERATIONAL MODES                          //
 // ---------------------------------------------------------------- //
+
+void modeTransition(unsigned char mode1, unsigned char mode2) {
+
+  // no transition
+  if (mode1 == mode2) {
+    return;
+  }
+
+  Serial.print("Transitioning from Mode "); Serial.print(mode1); 
+  Serial.print(" to Mode "); Serial.println(mode2);
+
+  if (mode2 == MODE_SAFE) {
+    // behaviour for entering safe mode
+  }
+
+  if (mode1 == MODE_SAFE) {
+    // behaviour for exiting safe mode
+  }
+
+  // behaviour for a specific mode transition
+//  if (mode1 == MODE_OPERATIONAL && mode2 == MODE_DOWNLINK) {
+//
+//  }
+}
 
 void modeOperational() {
   telemetryThread.check();

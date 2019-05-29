@@ -17,13 +17,14 @@
 #define MODE_OPERATIONAL 0
 #define MODE_DOWNLINK 1
 #define MODE_DETUMBLE 2
-#define MODE_DEPLOYMENT 3
-#define MODE_SAFE 4
-#define MODE_LAUNCH 5
+#define MODE_POINTING 3
+#define MODE_DEPLOYMENT 4
+#define MODE_SAFE 5
+#define MODE_LAUNCH 6
 
 // OTHER MODES
-#define MODE_STARTUP 6
-#define MODE_TESTING 7 // for any debugging stuff we want to do
+#define MODE_STARTUP 7
+#define MODE_TESTING 8 // for any debugging stuff we want to do
 
 unsigned char mode;
 unsigned char prevMode;
@@ -55,33 +56,47 @@ L298N motorX(2, 24, -1); // -1 for unused pins
 L298N motorY(5, 25, -1);
 L298N motorZ(6, 26, -1);
 
+// MAGNETORQUERS
+L298N coilX(20, 27, -1); // -1 for unused pins
+L298N coilY(17, 28, -1);
+L298N coilZ(16, 29, -1);
+
+
 // Main timed events
 void transmitWOD();
 void updateADCS();
-TimedAction telemetryThread = TimedAction(1000, transmitWOD);
-TimedAction ADCSThread = TimedAction(100, updateADCS);
-
-// Other timed events
-void debugPrint();
-TimedAction debugPrintThread = TimedAction(1000, debugPrint);
-
 void readGPSdata();
 void printGPSdata();
-TimedAction readGPSdataThread = TimedAction(1, readGPSdata);
+void debugPrint();
+void ADCSPointing();
+void ADCSDetumble();
+
+TimedAction telemetryThread = TimedAction(1000, transmitWOD);
+TimedAction ADCSDetumbleThread = TimedAction(100, ADCSDetumble);
+TimedAction ADCSPointingThread = TimedAction(100, ADCSPointing);
+
+// Other timed events
+TimedAction debugPrintThread = TimedAction(1000, debugPrint);
+
+TimedAction readGPSdataThread = TimedAction(1000, readGPSdata);
 
 // ADCS control gains
 float yaw, pitch, roll; // degrees
 void updateYawPitchRoll(); 
 
-int Kp = 200, Kd = 1, Ki = 0;
+int Kp = 5, Ki = 1, Kd = 1;
 
 // ADCS buffers (integral control)
 float ADCS_wx_err[ADCS_BUF_LEN];
 float ADCS_wy_err[ADCS_BUF_LEN];
 float ADCS_wz_err[ADCS_BUF_LEN];
+
 float ADCS_wx_integral = 0;
 float ADCS_wy_integral = 0;
 float ADCS_wz_integral = 0;
+
+float ADCS_yaw_err[ADCS_BUF_LEN];
+float ADCS_yaw_err_integral;
 
 // Magnetometer calibration
 #define MAG_CAL_X (7.5)
@@ -137,13 +152,6 @@ void setup() {
 //  setMotorSpeed(motorX, -100);
   delay(3000);
 
-
-  // set time intervals for all timed actions
-  telemetryThread.setInterval(1000);
-  ADCSThread.setInterval(100);
-  debugPrintThread.setInterval(1000);
-  readGPSdataThread.setInterval(1);
-
   // set the initial operating mode
   mode = MODE_TESTING;
   prevMode = mode;
@@ -175,6 +183,10 @@ void loop() {
       break;
 
     case MODE_DETUMBLE :
+      modeDetumble();
+      break;
+
+    case MODE_POINTING :
       modeDetumble();
       break;
 
@@ -248,7 +260,7 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
 
 void modeOperational() {
   telemetryThread.check();
-  ADCSThread.check();
+  ADCSPointing();
 }
 
 void modeDownlink() {
@@ -256,9 +268,13 @@ void modeDownlink() {
 }
 
 void modeDetumble() {
-  telemetryThread.check();
-  ADCSThread.check();
+  ADCSDetumbleThread.check();
 }
+
+void modePointing() {
+  ADCSPointingThread.check();
+}
+
 
 void modeDeployment() {
 
@@ -279,7 +295,7 @@ void modeStartup() {
 void modeTesting() {
   delay(1000);
 //  telemetryThread.check();
-  ADCSThread.check();
+  ADCSPointingThread.check();
 //  debugPrintThread.check();
   readGPSdataThread.check();
 
@@ -390,35 +406,56 @@ void getWOD() {
   *((unsigned long*)&transmit[82]) = gps.hdop.value();
 }
 
-void updateADCS() {
+// single axis attitude control (yaw) using reaction wheels 
+void ADCSPointing() {
   // index to insert into buffer
   static int i = 0;
-  int wx, wy, wz;
-  int inX, inY, inZ;
 
-  wx = IMU.getGyroX_rads();
-  wy = IMU.getGyroY_rads();
-  wz = IMU.getGyroZ_rads();
+  // ensure that yaw, pitch, roll are current
+  updateYawPitchRoll;
 
-  // add new term to integral and remove oldest term
-  ADCS_wx_integral += wx - (ADCS_wx_err[i]);
-  ADCS_wy_integral += wy - (ADCS_wy_err[i]);
-  ADCS_wz_integral += wz - (ADCS_wz_err[i]);
+  
+  float yaw_err = yaw - 0;
+  ADCS_yaw_err_integral += yaw_err - (ADCS_yaw_err[i]);
 
   // update integral buffers
-  ADCS_wx_err[i] = wx;
-  ADCS_wy_err[i] = wy;
-  ADCS_wz_err[i] = wz;
+  ADCS_yaw_err[i] = yaw_err;
 
   // calculate control values (PI control)
-  inX = - (Kp * wx) - (Ki * ADCS_wx_integral);
-  inY = - (Kp * wy) - (Ki * ADCS_wy_integral);
-  inZ = - (Kp * wz) - (Ki * ADCS_wz_integral);
+  int inZ = - (Kp * yaw_err) - (Ki * ADCS_yaw_err_integral);
+
+  Serial.println(inZ);
 
   // set motor speeds
-  setMotorSpeed(motorX, inX);
-  setMotorSpeed(motorY, inY);
-  setMotorSpeed(motorZ, inZ);
+  setMotorSpeed(motorZ, inZ);  
+}
+
+// detumbling using the magnetorquers
+void ADCSDetumble() {
+  static int i = 0;
+  
+  int wx = IMU.getGyroX_rads();
+  int wy = IMU.getGyroY_rads();
+  int wz = IMU.getGyroZ_rads();
+
+  float Bx = IMU.getMagX_uT() - MAG_CAL_X;
+  float By = IMU.getMagY_uT() - MAG_CAL_Y;
+  float Bz = IMU.getMagZ_uT() - MAG_CAL_Z;
+
+  // B DOT CONTROL
+  float Bdotx = wy*Bz - wz*By;
+  float Bdoty = wz*Bx - wx*Bz;
+  float Bdotz = wx*By - wy*Bx;
+
+  float Bmax = max(max(abs(Bdotx), abs(Bdoty)), abs(Bdotz));
+
+  int cX = (Bdotx * 255) / Bmax;
+  int cY = (Bdoty * 255) / Bmax;
+  int cZ = (Bdotz * 255) / Bmax;
+
+  setMotorSpeed(coilX, cX);
+  setMotorSpeed(coilY, cY);
+  setMotorSpeed(coilZ, cZ);
 
   i = (i+1) % ADCS_BUF_LEN;
 }

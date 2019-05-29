@@ -144,11 +144,40 @@
     <div id="right" style="float:right;bottom:0;padding:5px;box-sizing:border-box;width:25%;box-shadow:0px 0px 0px 1px black inset;">
       <div id="topright" style="">
         <h3>Payload</h3>
+        <table border="true" style="width:100%;column-width:20%;table-layout:fixed">
+          <tr>
+            <th>Parameter</th>
+            <th>Value</th>
+          </tr>
+          <tr>
+            <th colspan="2">Tether</th>
+          </tr>
+          <tr>
+            <td>Date</td>
+            <td id="sci_time"></td>
+          </tr>
+          <tr>
+            <td>Voltage</td>
+            <td id="sci_vTether"></td>
+          </tr>
+          <tr>
+        </table>
       </div>
       <div id="bottomright" style="">
         <h3>Command & Control</h3>
         Mode:
-        <input type="text" id="cc_mode" value="" maxlength="1">
+        <!--<input type="text" id="cc_mode" value="" maxlength="1">-->
+        <select id="cc_mode">
+          <option value="0">Operational</option>
+          <option value="1">Downlink</option>
+          <option value="2">Detumble</option>
+          <option value="3">Pointing</option>
+          <option value="4">Deployment</option>
+          <option value="5">Safe</option>
+          <option value="6">Launch</option>
+          <option value="7">Startup</option>
+          <option value="8">GroundTesting</option>
+        </select>
         <button onclick="changeMode()">Set</button>
       </div>
     </div>

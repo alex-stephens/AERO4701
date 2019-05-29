@@ -26,7 +26,7 @@
     app.ws('/ws', function(ws, req) {
         ws.on('message', function(msg) {
             console.log("Set mode: " + msg);
-            port.write(msg);
+            port.write(Buffer.from([Number(msg)]));
         });
     });
     var ws = expressWs.getWss('/ws');
@@ -45,13 +45,15 @@ function datain(newbuffer) {
         buffer = Buffer.concat([buffer, newbuffer]);
         //console.log(buffer.length);
     }
-    if (buffer.length >= 86) {
+    if (buffer.length > 0 && buffer[0]==='W'.charCodeAt(0) && buffer.length >= 87) {
         wod = {};
+        buffer = buffer.slice(1);
         wod.type = 'wod';
         //probably won't use this but here in case... //wod.time = (BigInt(buffer.readUInt32LE(0)<<32) + BigInt(buffer.readUInt32LE(4))).toString(); //use when we figure out 8byte timestamp
         wod.time = new Date(buffer.readUInt32LE(0)*1000);wod.time = wod.time.toJSON().toString() //unix time, seconds
         wod.uptime = buffer.readUInt32LE(4); //milliseconds
         wod.mode = buffer.readUInt8(8);
+        wod.mode = ["Operational","Downlink","Detumble","Pointing","Deployment","Safe","Launch","Startup","GroundTesting"][wod.mode];
         wod.vBat = buffer.readFloatLE(9).toFixed(1);
         wod.iBat = buffer.readFloatLE(13).toFixed(0);
         wod.tBat = buffer.readFloatLE(17).toFixed(0);
@@ -76,6 +78,23 @@ function datain(newbuffer) {
         //console.log(wod)
         ws.clients.forEach(function (client) {
             client.send(JSON.stringify(wod));
+        });
+    }
+    if (buffer.length > 0 && buffer[0]==='S'.charCodeAt(0) && buffer.length >= 9) {
+        sci = {};
+        buffer = buffer.slice(1);
+        sci.type = 'sci';
+        sci.time = new Date(buffer.readUInt32LE(0)*1000);sci.time = sci.time.toJSON().toString() //unix time, seconds
+        sci.vTether = buffer.readFloatLE(4).toFixed(3);
+        if (Number(sci.vTether) > 2.5) {
+            sci.vTether += " (OVER RANGE)"
+        }
+
+        //console.log(JSON.stringify(sci));
+
+        //console.log(wod)
+        ws.clients.forEach(function (client) {
+            client.send(JSON.stringify(sci));
         });
     }
 

@@ -1,15 +1,16 @@
 #include <Time.h>
 #include <TimeLib.h>
-#include <TimedAction.h>
+#include "TimedAction.h"
 #include "Arduino.h"
 #include "MPU9250.h" // from Bolder Flight Systems MPU9250
 #include <Wire.h>
 #include <Adafruit_INA219.h>
-#include <TinyGPS++.h>
+#include "TinyGPS++.h"
 #include <L298N.h>
 #include <math.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
+#define SCI_TRANSMIT_BUF_LEN (8)
 #define ADCS_BUF_LEN (100)
 
 
@@ -64,6 +65,7 @@ L298N coilZ(16, 29, -1);
 
 // Main timed events
 void transmitWOD();
+void transmitSci();
 void updateADCS();
 void readGPSdata();
 void printGPSdata();
@@ -71,7 +73,8 @@ void debugPrint();
 void ADCSPointing();
 void ADCSDetumble();
 
-TimedAction telemetryThread = TimedAction(1000, transmitWOD);
+TimedAction transmitWodThread = TimedAction(1000, transmitWOD);
+TimedAction transmitSciThread = TimedAction(1000, transmitSci);
 TimedAction ADCSDetumbleThread = TimedAction(100, ADCSDetumble);
 TimedAction ADCSPointingThread = TimedAction(100, ADCSPointing);
 
@@ -124,6 +127,9 @@ void setup() {
   pinMode(14, INPUT);
   pinMode(15, INPUT);
   pinMode(39, INPUT);
+  pinMode(23, INPUT);
+  pinMode(21, OUTPUT);
+  digitalWrite(21, LOW);
 
   // IMU
   while (IMU.begin() < 0) {
@@ -259,12 +265,12 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
 }
 
 void modeOperational() {
-  telemetryThread.check();
+  transmitWodThread.check();
   ADCSPointing();
 }
 
 void modeDownlink() {
-  telemetryThread.check();
+  transmitWodThread.check();
 }
 
 void modeDetumble() {
@@ -277,7 +283,8 @@ void modePointing() {
 
 
 void modeDeployment() {
-
+  tetherDeploy();
+  mode = MODE_OPERATIONAL;
 }
 
 void modeSafe() {
@@ -294,7 +301,7 @@ void modeStartup() {
 
 void modeTesting() {
   delay(1000);
-//  telemetryThread.check();
+  transmitSciThread.check();
   ADCSPointingThread.check();
 //  debugPrintThread.check();
   readGPSdataThread.check();
@@ -346,11 +353,30 @@ void debugPrint() {
   printIMUdata();
 }
 
+void transmitSci() {
+  getSci();
+  
+  Serial1.write(0x7E); //flag
+  Serial1.write(0x53); // S for Sci
+  for (char i = 0; i < SCI_TRANSMIT_BUF_LEN; i++) {
+    Serial1.write(transmit[i]);
+    Serial.write(transmit[i]);
+  }
+  Serial1.write(0x7E); //flag
+  Serial.write('\n');
+}
+
+void getSci() {
+  *((unsigned long*)&transmit[0]) = now();
+  unsigned int vt = analogRead(23);
+  *((float*)&transmit[4]) = vt*3.3/1024;
+}
 
 void transmitWOD() {
   getWOD();
   
   Serial1.write(0x7E); //flag
+  Serial1.write(0x57); // W for WOD 
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
     Serial.write(transmit[i]);
@@ -508,6 +534,14 @@ void setMotorSpeed(L298N& motor, int newSpeed) {
   else {
     motor.backward();
   }
+}
+
+void tetherDeploy() {
+  Serial.print("Start deploy... ");
+  digitalWrite(21, HIGH);
+  delay(1000);
+  digitalWrite(21, LOW);
+  Serial.println("Done!");
 }
 
 void printEPSdata() {

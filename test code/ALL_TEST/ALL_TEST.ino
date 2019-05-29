@@ -7,6 +7,7 @@
 #include <Adafruit_INA219.h>
 #include <TinyGPS++.h>
 #include <L298N.h>
+#include <math.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
 #define ADCS_BUF_LEN (100)
@@ -69,6 +70,9 @@ void printGPSdata();
 TimedAction readGPSdataThread = TimedAction(1, readGPSdata);
 
 // ADCS control gains
+float yaw, pitch, roll; // degrees
+void updateYawPitchRoll(); 
+
 int Kp = 200, Kd = 1, Ki = 0;
 
 // ADCS buffers (integral control)
@@ -78,6 +82,11 @@ float ADCS_wz_err[ADCS_BUF_LEN];
 float ADCS_wx_integral = 0;
 float ADCS_wy_integral = 0;
 float ADCS_wz_integral = 0;
+
+// Magnetometer calibration
+#define MAG_CAL_X (7.5)
+#define MAG_CAL_Y (-29.5)
+#define MAG_CAL_Z (-34.5)
 
 
 
@@ -154,7 +163,6 @@ void loop() {
 
   // mode transition handler
   modeTransition(prevMode, mode);
-
 
 
   switch (mode) {
@@ -269,9 +277,10 @@ void modeStartup() {
 }
 
 void modeTesting() {
-  telemetryThread.check();
+  delay(1000);
+//  telemetryThread.check();
   ADCSThread.check();
-  debugPrintThread.check();
+//  debugPrintThread.check();
   readGPSdataThread.check();
 
   // gyro print
@@ -283,6 +292,15 @@ void modeTesting() {
 //  Serial.print("\tZ: ");
 //  Serial.println(IMU.getGyroZ_rads(),6);
 
+  // accel print
+//  Serial.print(IMU.getAccelX_mss(),6);
+//  Serial.print("\t");
+//  Serial.print(IMU.getAccelY_mss(),6);
+//  Serial.print("\t");
+//  Serial.print(IMU.getAccelZ_mss(),6);
+//  Serial.println("\t");
+
+  updateYawPitchRoll();
 }
 
 
@@ -359,9 +377,11 @@ void getWOD() {
     *((float*)&transmit[53]) = gps.altitude.meters();
   }
 
-  *((float*)&transmit[57]) = 45.67;
-  *((float*)&transmit[61]) = 56.78;
-  *((float*)&transmit[65]) = 67.89;
+  // update yaw, pitch and roll before storing
+  updateYawPitchRoll();
+  *((float*)&transmit[57]) = yaw;
+  *((float*)&transmit[61]) = pitch;
+  *((float*)&transmit[65]) = roll;
   *((float*)&transmit[69]) = IMU.getGyroZ_rads();
   *((float*)&transmit[73]) = IMU.getGyroY_rads();
   *((float*)&transmit[77]) = IMU.getGyroX_rads();
@@ -402,6 +422,34 @@ void updateADCS() {
 
   i = (i+1) % ADCS_BUF_LEN;
 }
+
+void updateYawPitchRoll() {
+
+  IMU.readSensor();
+
+  // accelerometer readings
+  float accX = IMU.getAccelX_mss();
+  float accY = IMU.getAccelY_mss();
+  float accZ = IMU.getAccelZ_mss();
+
+  // calibrated magnetometer readings
+  float magX = IMU.getMagX_uT() - MAG_CAL_X;
+  float magY = IMU.getMagY_uT() - MAG_CAL_Y;
+  float magZ = IMU.getMagZ_uT() - MAG_CAL_Z;
+
+  // update global parameters
+  yaw =  180 * atan2(magY, magX)/M_PI; // pretty dubious formula
+  pitch = 180 * atan (accX/sqrt(accY*accY + accZ*accZ))/M_PI;
+  roll = 180 * atan (accY/sqrt(accX*accX + accZ*accZ))/M_PI;
+
+  sprintf(s, "Yaw: %-9.4f, pitch: %-9.4f, roll: %-9.4f", yaw, pitch, roll);
+  Serial.println(s);   
+
+  // Magnetometer raw values for calibration
+//  sprintf(s, "Magnetometer - x: %7.4f, y: %7.4f, z: %7.4f", magX, magY, magZ);
+//  Serial.println(s);   
+}
+
 
 void setMotorSpeed(L298N& motor, int newSpeed) {
 

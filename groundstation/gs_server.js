@@ -80,12 +80,13 @@ function datain(newbuffer) {
             client.send(JSON.stringify(wod));
         });
     }
-    if (buffer.length > 0 && buffer[0]==='S'.charCodeAt(0) && buffer.length >= 9) {
+    if (buffer.length > 0 && buffer[0]==='S'.charCodeAt(0) && buffer.length >= 13) {
         sci = {};
         buffer = buffer.slice(1);
         sci.type = 'sci';
         sci.time = new Date(buffer.readUInt32LE(0)*1000);sci.time = sci.time.toJSON().toString() //unix time, seconds
         sci.vTether = buffer.readFloatLE(4).toFixed(3);
+        sci.light = buffer.readFloatLE(8).toFixed(3);
         if (Number(sci.vTether) > 2.5) {
             sci.vTether += " (OVER RANGE)"
         }

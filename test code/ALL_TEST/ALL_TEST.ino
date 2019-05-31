@@ -10,8 +10,8 @@
 #include <math.h>
 
 #define WOD_TRANSMIT_BUF_LEN (86)
-#define SCI_TRANSMIT_BUF_LEN (8)
-#define ADCS_BUF_LEN (100)
+#define SCI_TRANSMIT_BUF_LEN (12)
+#define ADCS_BUF_LEN (500)
 
 
 // MAIN OPERATION MODES
@@ -87,7 +87,7 @@ TimedAction readGPSdataThread = TimedAction(1000, readGPSdata);
 float yaw, pitch, roll; // degrees
 void updateYawPitchRoll(); 
 
-int Kp = 5, Ki = 1, Kd = 1;
+int Kp = 2, Ki = 0.3, Kd = 1;
 
 // ADCS buffers (integral control)
 float ADCS_wx_err[ADCS_BUF_LEN];
@@ -105,7 +105,6 @@ float ADCS_yaw_err_integral;
 #define MAG_CAL_X (7.5)
 #define MAG_CAL_Y (-29.5)
 #define MAG_CAL_Z (-34.5)
-
 
 
 //SETUP
@@ -193,7 +192,7 @@ void loop() {
       break;
 
     case MODE_POINTING :
-      modeDetumble();
+      modePointing();
       break;
 
     case MODE_DEPLOYMENT :
@@ -250,6 +249,47 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
   Serial.print("Transitioning from Mode "); Serial.print(mode1); 
   Serial.print(" to Mode "); Serial.println(mode2);
 
+
+  // ENTERING NEW MODE
+  switch (mode2) {
+    case MODE_OPERATIONAL :
+      Serial.println("Entering operational mode. . .");
+      break;
+
+    case MODE_DOWNLINK :
+      Serial.println("Entering dpwnlink mode. . .");
+      break;
+
+    case MODE_DETUMBLE :
+      Serial.println("Entering detumble mode. . .");
+      break;
+
+    case MODE_POINTING :
+      Serial.println("Entering pointing mode. . .");
+      break;
+
+    case MODE_DEPLOYMENT :
+      Serial.println("Entering deployment mode. . .");
+      break;
+
+    case MODE_SAFE :
+      Serial.println("Entering safe mode. . .");
+      break;
+
+    case MODE_LAUNCH :
+      Serial.println("Entering launch mode. . .");
+      break;
+
+    case MODE_STARTUP :
+      Serial.println("Entering startup mode. . .");
+      break;
+
+    case MODE_TESTING :
+      modeTesting();
+      break;
+  }
+
+
   if (mode2 == MODE_SAFE) {
     // behaviour for entering safe mode
   }
@@ -266,11 +306,13 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
 
 void modeOperational() {
   transmitWodThread.check();
-  ADCSPointing();
+  transmitSciThread.check();
+  ADCSPointingThread.check();;
 }
 
 void modeDownlink() {
   transmitWodThread.check();
+  transmitSciThread.check();
 }
 
 void modeDetumble() {
@@ -284,6 +326,7 @@ void modePointing() {
 
 void modeDeployment() {
   tetherDeploy();
+  delay(1000);
   mode = MODE_OPERATIONAL;
 }
 
@@ -301,13 +344,13 @@ void modeStartup() {
 
 void modeTesting() {
   delay(1000);
-  transmitSciThread.check();
-  ADCSPointingThread.check();
-//  debugPrintThread.check();
   readGPSdataThread.check();
+//  transmitWodThread.check();
+  transmitSciThread.check();
+//  ADCSPointingThread.check();
+
 
   // gyro print
-  IMU.readSensor();
 //  Serial.print("Gyro - X:");
 //  Serial.print(IMU.getGyroX_rads(),6);
 //  Serial.print("\tY: ");
@@ -322,8 +365,6 @@ void modeTesting() {
 //  Serial.print("\t");
 //  Serial.print(IMU.getAccelZ_mss(),6);
 //  Serial.println("\t");
-
-  updateYawPitchRoll();
 }
 
 
@@ -370,6 +411,7 @@ void getSci() {
   *((unsigned long*)&transmit[0]) = now();
   unsigned int vt = analogRead(23);
   *((float*)&transmit[4]) = vt*3.3/1024;
+  *((float*)&transmit[8]) = analogRead(15);
 }
 
 void transmitWOD() {
@@ -438,10 +480,9 @@ void ADCSPointing() {
   static int i = 0;
 
   // ensure that yaw, pitch, roll are current
-  updateYawPitchRoll;
-
+  updateYawPitchRoll();
   
-  float yaw_err = yaw - 0;
+  float yaw_err = 0 - yaw; // negative to account for direction we want the motor to rotate
   ADCS_yaw_err_integral += yaw_err - (ADCS_yaw_err[i]);
 
   // update integral buffers
@@ -450,10 +491,12 @@ void ADCSPointing() {
   // calculate control values (PI control)
   int inZ = - (Kp * yaw_err) - (Ki * ADCS_yaw_err_integral);
 
-  Serial.println(inZ);
+//  Serial.println(ADCS_yaw_err_integral);
 
   // set motor speeds
   setMotorSpeed(motorZ, inZ);  
+
+  i = (i+1) % ADCS_BUF_LEN;
 }
 
 // detumbling using the magnetorquers
@@ -501,12 +544,12 @@ void updateYawPitchRoll() {
   float magZ = IMU.getMagZ_uT() - MAG_CAL_Z;
 
   // update global parameters
-  yaw =  180 * atan2(magY, magX)/M_PI; // pretty dubious formula
+  yaw =  -180 * atan2(magY, magX)/M_PI; // pretty dubious formula
   pitch = 180 * atan (accX/sqrt(accY*accY + accZ*accZ))/M_PI;
   roll = 180 * atan (accY/sqrt(accX*accX + accZ*accZ))/M_PI;
 
   sprintf(s, "Yaw: %-9.4f, pitch: %-9.4f, roll: %-9.4f", yaw, pitch, roll);
-  Serial.println(s);   
+//  Serial.println(s);   
 
   // Magnetometer raw values for calibration
 //  sprintf(s, "Magnetometer - x: %7.4f, y: %7.4f, z: %7.4f", magX, magY, magZ);

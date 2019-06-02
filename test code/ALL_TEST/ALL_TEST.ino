@@ -127,6 +127,7 @@ void setup() {
   pinMode(15, INPUT);
   pinMode(39, INPUT);
   pinMode(23, INPUT);
+  pinMode(34, INPUT);
   pinMode(21, OUTPUT);
   digitalWrite(21, LOW);
 
@@ -307,7 +308,7 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
 void modeOperational() {
   transmitWodThread.check();
   transmitSciThread.check();
-  ADCSPointingThread.check();;
+  ADCSPointingThread.check();
 }
 
 void modeDownlink() {
@@ -345,7 +346,7 @@ void modeStartup() {
 void modeTesting() {
   delay(1000);
   readGPSdataThread.check();
-//  transmitWodThread.check();
+  transmitWodThread.check();
   transmitSciThread.check();
 //  ADCSPointingThread.check();
 
@@ -410,8 +411,9 @@ void transmitSci() {
 void getSci() {
   *((unsigned long*)&transmit[0]) = now();
   unsigned int vt = analogRead(23);
+  unsigned int vz = analogRead(34);
   *((float*)&transmit[4]) = vt*3.3/1024;
-  *((float*)&transmit[8]) = analogRead(15);
+  *((float*)&transmit[8]) = vz*3.3/1024;
 }
 
 void transmitWOD() {

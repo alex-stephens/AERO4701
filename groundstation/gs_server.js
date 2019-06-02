@@ -46,6 +46,7 @@ function datain(newbuffer) {
         //console.log(buffer.length);
     }
     if (buffer.length > 0 && buffer[0]==='W'.charCodeAt(0) && buffer.length >= 87) {
+        //console.log('Wod buffer');
         wod = {};
         buffer = buffer.slice(1);
         wod.type = 'wod';
@@ -81,6 +82,7 @@ function datain(newbuffer) {
         });
     }
     if (buffer.length > 0 && buffer[0]==='S'.charCodeAt(0) && buffer.length >= 13) {
+        //console.log('Sci buffer');
         sci = {};
         buffer = buffer.slice(1);
         sci.type = 'sci';
@@ -88,7 +90,13 @@ function datain(newbuffer) {
         sci.vTether = buffer.readFloatLE(4).toFixed(3);
         sci.light = buffer.readFloatLE(8).toFixed(3);
         if (Number(sci.vTether) > 2.5) {
-            sci.vTether += " (OVER RANGE)"
+            sci.vTether += " (OVER RANGE)";
+        }
+        if (Number(sci.light) > 1.0) {
+            sci.light = "YES (" + sci.light + ")";
+        }
+        else {
+            sci.light = "NO (" + sci.light + ")"; 
         }
 
         //console.log(JSON.stringify(sci));

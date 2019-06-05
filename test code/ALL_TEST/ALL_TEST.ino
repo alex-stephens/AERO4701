@@ -150,13 +150,11 @@ void setup() {
   ina219_3v3.begin();
 
   // MOTOR - use setSpeed(0-255) then run forward() or backward()
-//  motorX.setSpeed(100);
-//  motorX.forward();
-  delay(3000);
-//  motorX.backward();
-//  set
-//  setMotorSpeed(motorX, -100);
-  delay(3000);
+  setMotorSpeed(motorX, 0);
+  setMotorSpeed(motorY, 0);
+  setMotorSpeed(motorZ, 0);
+
+
 
   // set the initial operating mode
   mode = MODE_TESTING;
@@ -344,28 +342,19 @@ void modeStartup() {
 }
 
 void modeTesting() {
-  delay(1000);
   readGPSdataThread.check();
   transmitWodThread.check();
   transmitSciThread.check();
-//  ADCSPointingThread.check();
 
+//  setMotorSpeed(coilZ, 255);
+//  Serial.print("Magnetic field +z");
+//  delay(3000);
+//
+//  setMotorSpeed(coilZ, -255);
+//  Serial.print("Magnetic field -z");
+//  delay(1000);
 
-  // gyro print
-//  Serial.print("Gyro - X:");
-//  Serial.print(IMU.getGyroX_rads(),6);
-//  Serial.print("\tY: ");
-//  Serial.print(IMU.getGyroY_rads(),6);
-//  Serial.print("\tZ: ");
-//  Serial.println(IMU.getGyroZ_rads(),6);
-
-  // accel print
-//  Serial.print(IMU.getAccelX_mss(),6);
-//  Serial.print("\t");
-//  Serial.print(IMU.getAccelY_mss(),6);
-//  Serial.print("\t");
-//  Serial.print(IMU.getAccelZ_mss(),6);
-//  Serial.println("\t");
+  setMotorSpeed(motorX, 100);
 }
 
 
@@ -490,13 +479,17 @@ void ADCSPointing() {
   // update integral buffers
   ADCS_yaw_err[i] = yaw_err;
 
+  // angular rate
+  int wz = IMU.getGyroZ_rads();
+
+
   // calculate control values (PI control)
-  int inZ = - (Kp * yaw_err) - (Ki * ADCS_yaw_err_integral);
+  int inZ = (Kp * yaw_err) + (Ki * ADCS_yaw_err_integral) + Kd*wz;
 
 //  Serial.println(ADCS_yaw_err_integral);
 
   // set motor speeds
-  setMotorSpeed(motorZ, inZ);  
+  setMotorSpeed(motorX, inZ);  // using the MOTOR X driver for z-axis control
 
   i = (i+1) % ADCS_BUF_LEN;
 }
@@ -560,6 +553,11 @@ void updateYawPitchRoll() {
 
 
 void setMotorSpeed(L298N& motor, int newSpeed) {
+
+  // reverse direction on some coils/motors
+  if (&motor == &coilX || &motor == &coilY || &motor == &coilZ) {
+    newSpeed = -newSpeed;
+  }
 
   // max input
   if (newSpeed > 255) {

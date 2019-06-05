@@ -9,7 +9,7 @@
 #include <L298N.h>
 #include <math.h>
 
-#define WOD_TRANSMIT_BUF_LEN (86)
+#define WOD_TRANSMIT_BUF_LEN (87)
 #define SCI_TRANSMIT_BUF_LEN (12)
 #define ADCS_BUF_LEN (500)
 
@@ -128,6 +128,8 @@ void setup() {
   pinMode(39, INPUT);
   pinMode(23, INPUT);
   pinMode(34, INPUT);
+  pinMode(7, INPUT);
+  pinMode(8, INPUT);
   pinMode(21, OUTPUT);
   digitalWrite(21, LOW);
 
@@ -159,7 +161,7 @@ void setup() {
   delay(3000);
 
   // set the initial operating mode
-  mode = MODE_TESTING;
+  mode = MODE_SAFE;
   prevMode = mode;
 }
 
@@ -318,16 +320,17 @@ void modeDownlink() {
 
 void modeDetumble() {
   ADCSDetumbleThread.check();
+  transmitWodThread.check();
 }
 
 void modePointing() {
   ADCSPointingThread.check();
+  transmitWodThread.check();
 }
 
 
 void modeDeployment() {
   tetherDeploy();
-  delay(1000);
   mode = MODE_OPERATIONAL;
 }
 
@@ -474,6 +477,9 @@ void getWOD() {
 
   transmit[81] = gps.satellites.value();
   *((unsigned long*)&transmit[82]) = gps.hdop.value();
+ 
+  *((unsigned char*)&transmit[86]) = (digitalRead(7)&0x01) + (digitalRead(8)&0x01)*2;
+
 }
 
 // single axis attitude control (yaw) using reaction wheels 
@@ -584,7 +590,7 @@ void setMotorSpeed(L298N& motor, int newSpeed) {
 void tetherDeploy() {
   Serial.print("Start deploy... ");
   digitalWrite(21, HIGH);
-  delay(1000);
+  delay(30000);
   digitalWrite(21, LOW);
   Serial.println("Done!");
 }

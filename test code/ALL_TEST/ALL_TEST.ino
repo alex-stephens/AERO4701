@@ -76,6 +76,7 @@ void ADCSDetumble();
 TimedAction transmitWodThread = TimedAction(1000, transmitWOD);
 TimedAction transmitSciThread = TimedAction(1000, transmitSci);
 TimedAction ADCSDetumbleThread = TimedAction(100, ADCSDetumble);
+TimedAction ADCSAntiDetumbleThread = TimedAction(100, ADCSAntiDetumble);
 TimedAction ADCSPointingThread = TimedAction(100, ADCSPointing);
 
 // Other timed events
@@ -87,7 +88,7 @@ TimedAction readGPSdataThread = TimedAction(1000, readGPSdata);
 float yaw, pitch, roll; // degrees
 void updateYawPitchRoll();
 
-int Kp = 2, Ki = 0.3, Kd = 1;
+int Kp = 10, Ki = 0.3, Kd = 10;
 
 // ADCS buffers (integral control)
 float ADCS_wx_err[ADCS_BUF_LEN];
@@ -102,8 +103,8 @@ float ADCS_yaw_err[ADCS_BUF_LEN];
 float ADCS_yaw_err_integral;
 
 // Magnetometer calibration
-#define MAG_CAL_X (7.5)
-#define MAG_CAL_Y (-29.5)
+#define MAG_CAL_X (13)
+#define MAG_CAL_Y (34.5)
 #define MAG_CAL_Z (-34.5)
 
 
@@ -299,6 +300,13 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
     // behaviour for exiting safe mode
   }
 
+  // leaving pointing mode - turn off motors
+  if (mode1 == MODE_POINTING) {
+    setMotorSpeed(motorX, 0);
+    setMotorSpeed(motorY, 0);
+    setMotorSpeed(motorZ, 0);
+  }
+
   // behaviour for a specific mode transition
 //  if (mode1 == MODE_OPERATIONAL && mode2 == MODE_DOWNLINK) {
 //
@@ -345,19 +353,31 @@ void modeStartup() {
 }
 
 void modeTesting() {
-  readGPSdataThread.check();
-  transmitWodThread.check();
-  transmitSciThread.check();
-
-//  setMotorSpeed(coilZ, 255);
-//  Serial.print("Magnetic field +z");
-//  delay(3000);
+//  readGPSdataThread.check();
+//  transmitWodThread.check();
+//  transmitSciThread.check();
 //
-//  setMotorSpeed(coilZ, -255);
-//  Serial.print("Magnetic field -z");
+////  setMotorSpeed(coilZ, 255);
+////  Serial.print("Magnetic field +z");
 //  delay(1000);
+////
+////  setMotorSpeed(coilZ, -255);
+////  Serial.print("Magnetic field -z");
+////  delay(1000);
+//
+//  float Bx = IMU.getMagX_uT();
+//  float By = IMU.getMagY_uT();
+//  float Bz = IMU.getMagZ_uT();  
+//  sprintf(s, "Bx: %-9.4f, By: %-9.4f, Bz: %-9.4f", Bx, By, Bz);
+//  Serial.println(s);
+//
+//
+//  setMotorSpeed(motorX, 100);
 
-  setMotorSpeed(motorX, 100);
+
+  // ANTI-DETUMBLING CODE
+  ADCSAntiDetumbleThread.check();
+  transmitWodThread.check();
 }
 
 
@@ -490,9 +510,10 @@ void ADCSPointing() {
 
 
   // calculate control values (PI control)
-  int inZ = (Kp * yaw_err) + (Ki * ADCS_yaw_err_integral) + Kd*wz;
+  int inZ = (Kp * yaw_err) /*+ (Ki * ADCS_yaw_err_integral)*/ + Kd*wz;
 
-//  Serial.println(ADCS_yaw_err_integral);
+  
+  Serial.println(yaw_err);
 
   // set motor speeds
   setMotorSpeed(motorX, inZ);  // using the MOTOR X driver for z-axis control
@@ -502,7 +523,8 @@ void ADCSPointing() {
 
 // detumbling using the magnetorquers
 void ADCSDetumble() {
-  static int i = 0;
+
+  IMU.readSensor();
 
   int wx = IMU.getGyroX_rads();
   int wy = IMU.getGyroY_rads();
@@ -526,8 +548,35 @@ void ADCSDetumble() {
   setMotorSpeed(coilX, cX);
   setMotorSpeed(coilY, cY);
   setMotorSpeed(coilZ, cZ);
+}
 
-  i = (i+1) % ADCS_BUF_LEN;
+// detumbling using the magnetorquers
+void ADCSAntiDetumble() {
+
+  IMU.readSensor();
+
+  int wx = IMU.getGyroX_rads();
+  int wy = IMU.getGyroY_rads();
+  int wz = IMU.getGyroZ_rads();
+
+  float Bx = IMU.getMagX_uT() - MAG_CAL_X;
+  float By = IMU.getMagY_uT() - MAG_CAL_Y;
+  float Bz = IMU.getMagZ_uT() - MAG_CAL_Z;
+
+  // B DOT CONTROL
+  float Bdotx = wy*Bz - wz*By;
+  float Bdoty = wz*Bx - wx*Bz;
+  float Bdotz = wx*By - wy*Bx;
+
+  float Bmax = max(max(abs(Bdotx), abs(Bdoty)), abs(Bdotz));
+
+  int cX = (Bdotx * 255) / Bmax;
+  int cY = (Bdoty * 255) / Bmax;
+  int cZ = (Bdotz * 255) / Bmax;
+
+  setMotorSpeed(coilX, -cX);
+  setMotorSpeed(coilY, -cY);
+  setMotorSpeed(coilZ, -cZ);
 }
 
 void updateYawPitchRoll() {
@@ -560,17 +609,31 @@ void updateYawPitchRoll() {
 
 void setMotorSpeed(L298N& motor, int newSpeed) {
 
-  // reverse direction on some coils/motors
+  int MOTOR_SPEED_MAX = 255;
+  int MOTOR_SPEED_MIN = 50;
+
   if (&motor == &coilX || &motor == &coilY || &motor == &coilZ) {
+    MOTOR_SPEED_MAX = 255;
+  }
+
+  // reverse direction on some coils/motors
+  if (&motor == &motorX || &motor == &coilX || &motor == &coilY || &motor == &coilZ) {
     newSpeed = -newSpeed;
   }
 
   // max input
-  if (newSpeed > 255) {
-    newSpeed = 255;
+  if (newSpeed > MOTOR_SPEED_MAX) {
+    newSpeed = MOTOR_SPEED_MAX;
   }
-  else if (newSpeed < -255) {
-    newSpeed = -255;
+  else if (newSpeed < -MOTOR_SPEED_MAX) {
+    newSpeed = -MOTOR_SPEED_MAX;
+  }
+
+  if (newSpeed > 10 && newSpeed < MOTOR_SPEED_MIN) {
+    newSpeed = MOTOR_SPEED_MIN;
+  }
+  else if (newSpeed < -10 && newSpeed > -MOTOR_SPEED_MIN) {
+    newSpeed = MOTOR_SPEED_MIN;
   }
 
   // update the speed

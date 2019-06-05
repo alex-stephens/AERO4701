@@ -9,7 +9,7 @@
 #include <L298N.h>
 #include <math.h>
 
-#define WOD_TRANSMIT_BUF_LEN (86)
+#define WOD_TRANSMIT_BUF_LEN (87)
 #define SCI_TRANSMIT_BUF_LEN (12)
 #define ADCS_BUF_LEN (500)
 
@@ -85,7 +85,7 @@ TimedAction readGPSdataThread = TimedAction(1000, readGPSdata);
 
 // ADCS control gains
 float yaw, pitch, roll; // degrees
-void updateYawPitchRoll(); 
+void updateYawPitchRoll();
 
 int Kp = 2, Ki = 0.3, Kd = 1;
 
@@ -128,6 +128,8 @@ void setup() {
   pinMode(39, INPUT);
   pinMode(23, INPUT);
   pinMode(34, INPUT);
+  pinMode(7, INPUT);
+  pinMode(8, INPUT);
   pinMode(21, OUTPUT);
   digitalWrite(21, LOW);
 
@@ -157,7 +159,7 @@ void setup() {
 
 
   // set the initial operating mode
-  mode = MODE_TESTING;
+  mode = MODE_SAFE;
   prevMode = mode;
 }
 
@@ -167,7 +169,7 @@ void setup() {
 
 
 void loop() {
- 
+
   // C&C
   while (Serial1.available()) {
     mode = Serial1.read();
@@ -245,7 +247,7 @@ void modeTransition(unsigned char mode1, unsigned char mode2) {
     return;
   }
 
-  Serial.print("Transitioning from Mode "); Serial.print(mode1); 
+  Serial.print("Transitioning from Mode "); Serial.print(mode1);
   Serial.print(" to Mode "); Serial.println(mode2);
 
 
@@ -316,16 +318,17 @@ void modeDownlink() {
 
 void modeDetumble() {
   ADCSDetumbleThread.check();
+  transmitWodThread.check();
 }
 
 void modePointing() {
   ADCSPointingThread.check();
+  transmitWodThread.check();
 }
 
 
 void modeDeployment() {
   tetherDeploy();
-  delay(1000);
   mode = MODE_OPERATIONAL;
 }
 
@@ -373,7 +376,7 @@ void debugPrint() {
   digitalWrite(13, HIGH);
   delay(500);
   digitalWrite(13, LOW);
-  
+
   // GPS
   printGPSdata();
 
@@ -386,7 +389,7 @@ void debugPrint() {
 
 void transmitSci() {
   getSci();
-  
+
   Serial1.write(0x7E); //flag
   Serial1.write(0x53); // S for Sci
   for (char i = 0; i < SCI_TRANSMIT_BUF_LEN; i++) {
@@ -407,9 +410,9 @@ void getSci() {
 
 void transmitWOD() {
   getWOD();
-  
+
   Serial1.write(0x7E); //flag
-  Serial1.write(0x57); // W for WOD 
+  Serial1.write(0x57); // W for WOD
   for (char i = 0; i < WOD_TRANSMIT_BUF_LEN; i++) {
     Serial1.write(transmit[i]);
     Serial.write(transmit[i]);
@@ -441,7 +444,7 @@ void getWOD() {
   unsigned int rfdTemp = analogRead(39);
   *((float*)&transmit[41]) = 0.0000006*rfdTemp*rfdTemp*rfdTemp - 0.0008*rfdTemp*rfdTemp + 0.3892*rfdTemp - 51.964;
 
-  
+
   if (gps.satellites.value() == 0) {
     *((float*)&transmit[45]) = 360.0;
     *((float*)&transmit[49]) = 360.0;
@@ -463,16 +466,19 @@ void getWOD() {
 
   transmit[81] = gps.satellites.value();
   *((unsigned long*)&transmit[82]) = gps.hdop.value();
+
+  *((unsigned char*)&transmit[86]) = (digitalRead(7)&0x01) + (digitalRead(8)&0x01)*2;
+
 }
 
-// single axis attitude control (yaw) using reaction wheels 
+// single axis attitude control (yaw) using reaction wheels
 void ADCSPointing() {
   // index to insert into buffer
   static int i = 0;
 
   // ensure that yaw, pitch, roll are current
   updateYawPitchRoll();
-  
+
   float yaw_err = 0 - yaw; // negative to account for direction we want the motor to rotate
   ADCS_yaw_err_integral += yaw_err - (ADCS_yaw_err[i]);
 
@@ -497,7 +503,7 @@ void ADCSPointing() {
 // detumbling using the magnetorquers
 void ADCSDetumble() {
   static int i = 0;
-  
+
   int wx = IMU.getGyroX_rads();
   int wy = IMU.getGyroY_rads();
   int wz = IMU.getGyroZ_rads();
@@ -544,11 +550,11 @@ void updateYawPitchRoll() {
   roll = 180 * atan (accY/sqrt(accX*accX + accZ*accZ))/M_PI;
 
   sprintf(s, "Yaw: %-9.4f, pitch: %-9.4f, roll: %-9.4f", yaw, pitch, roll);
-//  Serial.println(s);   
+//  Serial.println(s);
 
   // Magnetometer raw values for calibration
 //  sprintf(s, "Magnetometer - x: %7.4f, y: %7.4f, z: %7.4f", magX, magY, magZ);
-//  Serial.println(s);   
+//  Serial.println(s);
 }
 
 
@@ -582,7 +588,7 @@ void setMotorSpeed(L298N& motor, int newSpeed) {
 void tetherDeploy() {
   Serial.print("Start deploy... ");
   digitalWrite(21, HIGH);
-  delay(1000);
+  delay(30000);
   digitalWrite(21, LOW);
   Serial.println("Done!");
 }
@@ -628,12 +634,12 @@ void readGPSdata() {
     char c = Serial2.read();
     gps.encode(c);
     if (gps.location.isUpdated()) {
-      setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year()); 
+      setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year());
     }
   }
 }
 
 void printGPSdata() {
     sprintf(s, "Lat: %ld, Lon: %ld, Time: %ld", gps.location.lat(), gps.location.lng(), gps.time.value());
-    Serial.println(s);       
+    Serial.println(s);
 }

@@ -43,9 +43,9 @@ function datain(newbuffer) {
         buffer = new Buffer.alloc(0);
     } else {
         buffer = Buffer.concat([buffer, newbuffer]);
-        //console.log(buffer.length);
+        console.log(buffer.length);
     }
-    if (buffer.length > 0 && buffer[0]==='W'.charCodeAt(0) && buffer.length >= 87) {
+    if (buffer.length > 0 && buffer[0]==='W'.charCodeAt(0) && buffer.length >= 88) {
         //console.log('Wod buffer');
         wod = {};
         buffer = buffer.slice(1);
@@ -75,8 +75,10 @@ function datain(newbuffer) {
         wod.rollRate = buffer.readFloatLE(77).toFixed(2);
         wod.sats = buffer.readUInt8(81).toFixed(0);
         wod.hdop = ((buffer.readUInt32LE(82))/100).toFixed(2);
+        wod.sBat = ["Trickle Charging","Charged","Charging","Discharging"][buffer.readUInt8(86)]
+        wod.sBat += " (" + buffer.readUInt8(86) + ")"
 
-        //console.log(wod)
+        console.log(JSON.stringify(wod))
         ws.clients.forEach(function (client) {
             client.send(JSON.stringify(wod));
         });
@@ -93,13 +95,13 @@ function datain(newbuffer) {
             sci.vTether += " (OVER RANGE)";
         }
         if (Number(sci.light) > 1.0) {
-            sci.light = "YES (" + sci.light + ")";
+            sci.light = "YES (" + sci.light + " V)";
         }
         else {
-            sci.light = "NO (" + sci.light + ")"; 
+            sci.light = "NO (" + sci.light + " V)";
         }
 
-        //console.log(JSON.stringify(sci));
+        console.log(JSON.stringify(sci));
 
         //console.log(wod)
         ws.clients.forEach(function (client) {

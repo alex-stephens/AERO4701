@@ -5,7 +5,7 @@
   "main": "gs_server.js",
   "author": "SCEPTRE Dev Team",
   "dependencies": {
-    "express": "^4.16.4",
+    "express": "^4.17.3",
     "express-ws": "^4.0.0",
     "morgan": "^1.9.1",
     "serialport": "^7.1.5"
